@@ -1,0 +1,56 @@
+# Creates the train_registry login and database if they are missing; safe to run on every sync
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: train-registry-database-setup
+  namespace: lineclear
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  backoffLimit: 4
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: psql
+          image: postgres:17-alpine
+          env:
+            - name: PGHOST
+              valueFrom:
+                secretKeyRef: { name: rds-master, key: host }
+            - name: PGPORT
+              valueFrom:
+                secretKeyRef: { name: rds-master, key: port }
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef: { name: rds-master, key: username }
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef: { name: rds-master, key: password }
+            - name: PGDATABASE
+              value: postgres
+            - name: PGSSLMODE
+              value: require
+            - name: APP_DB
+              valueFrom:
+                secretKeyRef: { name: train-registry-database, key: dbname }
+            - name: APP_USER
+              valueFrom:
+                secretKeyRef: { name: train-registry-database, key: username }
+            - name: APP_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: train-registry-database, key: password }
+          command: ["sh", "-c"]
+          args:
+            - |
+              psql -v ON_ERROR_STOP=1 \
+                   -v app_db="$APP_DB" -v app_user="$APP_USER" -v app_password="$APP_PASSWORD" <<'SQL'
+              SELECT format('CREATE ROLE %I LOGIN', :'app_user')
+              WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'app_user') \gexec
+              SELECT format('ALTER ROLE %I PASSWORD %L', :'app_user', :'app_password') \gexec
+              SELECT format('GRANT %I TO CURRENT_USER', :'app_user') \gexec
+              SELECT format('CREATE DATABASE %I OWNER %I', :'app_db', :'app_user')
+              WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'app_db') \gexec
+              SQL
