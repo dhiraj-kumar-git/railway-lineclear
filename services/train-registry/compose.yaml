@@ -1,0 +1,26 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: train_registry
+      POSTGRES_USER: train_registry
+      POSTGRES_PASSWORD: local-only-password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U train_registry -d train_registry"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  train-registry:
+    build: .
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: train_registry
+      DB_USER: train_registry
+      DB_PASSWORD: local-only-password
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
