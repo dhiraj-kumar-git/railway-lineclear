@@ -1,0 +1,13 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: train-registry
+  namespace: lineclear
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: train-registry
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

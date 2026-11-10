@@ -9,7 +9,6 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "2"
 spec:
-  replicas: 2
   selector:
     matchLabels:
       app.kubernetes.io/name: train-registry
@@ -21,7 +20,7 @@ spec:
     spec:
       containers:
         - name: train-registry
-          image: 714989832567.dkr.ecr.ap-south-1.amazonaws.com/lineclear/train-registry:95140d1
+          image: 714989832567.dkr.ecr.ap-south-1.amazonaws.com/lineclear/train-registry:63e913d
           ports:
             - name: http
               containerPort: 8000
