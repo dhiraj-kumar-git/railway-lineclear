@@ -30,3 +30,7 @@ output "kafka_bootstrap_brokers_tls" {
 output "train_positions_table" {
   value = aws_dynamodb_table.train_positions_latest.name
 }
+
+output "election_lease_table" {
+  value = aws_dynamodb_table.election_lease.name
+}

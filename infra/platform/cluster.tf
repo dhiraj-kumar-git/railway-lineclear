@@ -30,11 +30,12 @@ module "eks" {
 
   eks_managed_node_groups = {
     general = {
-      ami_type       = "AL2023_x86_64_STANDARD"
-      instance_types = ["t3.large"]
-      min_size       = 2
-      max_size       = 4
-      desired_size   = 2
+      ami_type                       = "AL2023_x86_64_STANDARD"
+      instance_types                 = ["t3.large"]
+      min_size                       = 2
+      max_size                       = 4
+      desired_size                   = 2
+      use_latest_ami_release_version = false
     }
   }
 }
