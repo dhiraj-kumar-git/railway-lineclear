@@ -41,6 +41,7 @@ locals {
   ]
 
   service_databases = {
-    "train-registry" = "train_registry"
+    "train-registry"     = "train_registry"
+    "track-availability" = "track"
   }
 }
