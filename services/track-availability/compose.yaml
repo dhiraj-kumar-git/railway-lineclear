@@ -1,0 +1,27 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: track
+      POSTGRES_USER: track
+      POSTGRES_PASSWORD: local-only-password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U track -d track"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  track-availability:
+    build: .
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: track
+      DB_USER: track
+      DB_PASSWORD: local-only-password
+    ports:
+      - "50051:50051"
+      - "9100:9100"
+    depends_on:
+      postgres:
+        condition: service_healthy
