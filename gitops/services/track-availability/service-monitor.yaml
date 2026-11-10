@@ -1,0 +1,13 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: track-availability
+  namespace: lineclear
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: track-availability
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s
