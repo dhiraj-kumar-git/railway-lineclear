@@ -1,0 +1,19 @@
+[project]
+name = "leader-election"
+version = "0.1.0"
+description = "Leader Election for Railway LineClear: a DynamoDB lease with terms, and election events on Kafka"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "grpcio>=1.80",
+    "grpcio-health-checking>=1.80",
+    "grpcio-reflection>=1.80",
+    "protobuf>=6.31",
+    "boto3>=1.35",
+    "confluent-kafka>=2.6",
+    "prometheus-client>=0.21",
+]
+
+[dependency-groups]
+dev = [
+    "grpcio-tools>=1.80",
+]
