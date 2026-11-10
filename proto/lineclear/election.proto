@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+// Leader election through a lease: one candidate holds it at a time and must renew it.
+// Each new holder gets the next term number, which participants use to refuse old leaders.
+package lineclear.election.v1;
+
+service LeaderElection {
+  // Become leader if nobody holds a live lease; a current holder's lease is extended.
+  rpc Campaign(CampaignRequest) returns (CampaignReply);
+
+  // Extend the lease. Fails if the lease has passed to someone else or ran out.
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatReply);
+
+  // Who holds the lease now, if anyone.
+  rpc GetLeader(GetLeaderRequest) returns (GetLeaderReply);
+}
+
+message CampaignRequest {
+  string election = 1;      // for example schedule-coordinator
+  string candidate_id = 2;  // for example the pod name
+}
+
+message CampaignReply {
+  bool is_leader = 1;
+  string leader_id = 2;
+  int64 term = 3;
+  int64 lease_remaining_ms = 4;
+}
+
+message HeartbeatRequest {
+  string election = 1;
+  string candidate_id = 2;
+  int64 term = 3;
+}
+
+message HeartbeatReply {
+  bool still_leader = 1;
+  string leader_id = 2;
+  int64 term = 3;
+  int64 lease_remaining_ms = 4;
+}
+
+message GetLeaderRequest {
+  string election = 1;
+}
+
+message GetLeaderReply {
+  bool has_leader = 1;
+  string leader_id = 2;
+  int64 term = 3;
+  int64 lease_remaining_ms = 4;
+}
