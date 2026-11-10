@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: position-ingestion
+  namespace: lineclear
+  labels:
+    app.kubernetes.io/name: position-ingestion
+    app.kubernetes.io/part-of: railway-lineclear
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: position-ingestion
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: position-ingestion
+        app.kubernetes.io/part-of: railway-lineclear
+    spec:
+      serviceAccountName: position-ingestion
+      containers:
+        - name: position-ingestion
+          image: 714989832567.dkr.ecr.ap-south-1.amazonaws.com/lineclear/position-ingestion:999f9ad
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: TRAIN_REGISTRY_URL
+              value: http://train-registry.lineclear.svc.cluster.local
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                secretKeyRef: { name: kafka-connection, key: bootstrap_servers }
+            - name: KAFKA_SECURITY_PROTOCOL
+              valueFrom:
+                secretKeyRef: { name: kafka-connection, key: security_protocol }
+            - name: POSITIONS_TABLE
+              value: lineclear-train-positions-latest
+            - name: AWS_REGION
+              value: ap-south-1
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 384Mi
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10

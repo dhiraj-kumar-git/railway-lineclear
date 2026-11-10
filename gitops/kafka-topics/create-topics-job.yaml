@@ -1,0 +1,38 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: create-kafka-topics
+  namespace: lineclear
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: kafka-topics
+          image: apache/kafka:3.9.1
+          env:
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                secretKeyRef: { name: kafka-connection, key: bootstrap_servers }
+            - name: KAFKA_SECURITY_PROTOCOL
+              valueFrom:
+                secretKeyRef: { name: kafka-connection, key: security_protocol }
+            - name: KAFKA_HEAP_OPTS
+              value: "-Xmx256m"
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -e
+              echo "security.protocol=$KAFKA_SECURITY_PROTOCOL" > /tmp/client.properties
+              for topic in train.positions:6 incident.events:3 coordination.events:3 ops.results:3; do
+                /opt/kafka/bin/kafka-topics.sh --bootstrap-server "$KAFKA_BOOTSTRAP_SERVERS" \
+                  --command-config /tmp/client.properties --create --if-not-exists \
+                  --topic "${topic%%:*}" --partitions "${topic##*:}" --replication-factor 2
+              done
+              /opt/kafka/bin/kafka-topics.sh --bootstrap-server "$KAFKA_BOOTSTRAP_SERVERS" \
+                --command-config /tmp/client.properties --describe
