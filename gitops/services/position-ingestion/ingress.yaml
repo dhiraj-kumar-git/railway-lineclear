@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: position-ingestion
+  namespace: lineclear
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/group.name: lineclear
+    alb.ingress.kubernetes.io/load-balancer-name: lineclear-public
+    alb.ingress.kubernetes.io/healthcheck-path: /healthz
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          - path: /api/positions
+            pathType: Prefix
+            backend:
+              service:
+                name: position-ingestion
+                port:
+                  number: 80
