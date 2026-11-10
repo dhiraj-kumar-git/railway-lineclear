@@ -11,3 +11,4 @@ kubeconfig*
 __pycache__/
 .venv/
 docs
+scripts

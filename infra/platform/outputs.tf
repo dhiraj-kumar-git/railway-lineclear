@@ -21,3 +21,12 @@ output "ecr_repository_urls" {
 output "rds_address" {
   value = aws_db_instance.main.address
 }
+
+
+output "kafka_bootstrap_brokers_tls" {
+  value = try(aws_msk_cluster.main[0].bootstrap_brokers_tls, null)
+}
+
+output "train_positions_table" {
+  value = aws_dynamodb_table.train_positions_latest.name
+}
