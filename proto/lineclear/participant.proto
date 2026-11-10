@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+// Two-phase commit between the coordinator (Schedule Manager) and the participants
+// (Track Availability and Incident Manager) for one diversion around a track incident.
+package lineclear.participant.v1;
+
+// Implemented by every participant.
+// Every call that carries a term is refused with FAILED_PRECONDITION when the term is
+// lower than the highest term the participant has already seen, so orders from a
+// leader whose lease has passed to someone else are ignored.
+service Participant {
+  // Phase 1: check the plan, hold what it needs, and vote. The vote is saved before the reply,
+  // and asking again for the same transaction returns the saved vote.
+  rpc Prepare(PrepareRequest) returns (PrepareReply);
+
+  // Phase 2: make the prepared change permanent. Repeating it changes nothing.
+  rpc Commit(DecisionRequest) returns (DecisionReply);
+
+  // Phase 2: release what was held. Abort for a transaction never prepared is remembered,
+  // so a late Prepare for it is refused.
+  rpc Abort(DecisionRequest) returns (DecisionReply);
+
+  // What this participant has recorded for a transaction.
+  rpc GetDecision(GetDecisionRequest) returns (GetDecisionReply);
+}
+
+// Implemented by the coordinator: the decision written in its own log.
+// A transaction it has no decision for is treated as aborted.
+service Coordinator {
+  rpc GetDecision(GetDecisionRequest) returns (GetDecisionReply);
+}
+
+// What a diversion changes: the broken block section is closed and the train runs through a loop line.
+message DiversionPlan {
+  string incident_id = 1;      // for example I-45
+  string train_number = 2;     // for example 12951
+  string blocked_section = 3;  // for example S7
+  string loop_line = 4;        // for example L2
+}
+
+message PrepareRequest {
+  string txn_id = 1;          // for example T-101
+  int64 term = 2;             // the coordinator's leader term
+  string coordinator_id = 3;
+  DiversionPlan plan = 4;
+}
+
+enum Vote {
+  VOTE_UNSPECIFIED = 0;
+  VOTE_YES = 1;
+  VOTE_NO = 2;
+}
+
+message PrepareReply {
+  Vote vote = 1;
+  string reason = 2;  // why the vote is no, in plain words
+}
+
+message DecisionRequest {
+  string txn_id = 1;
+  int64 term = 2;
+  string coordinator_id = 3;
+}
+
+enum TxnState {
+  TXN_STATE_UNSPECIFIED = 0;  // never seen
+  TXN_STATE_PREPARED = 1;
+  TXN_STATE_COMMITTED = 2;
+  TXN_STATE_ABORTED = 3;
+}
+
+message DecisionReply {
+  TxnState state = 1;  // the state after the call
+}
+
+message GetDecisionRequest {
+  string txn_id = 1;
+}
+
+message GetDecisionReply {
+  TxnState state = 1;
+  Vote vote = 2;
+  int64 term = 3;  // the term of the last call that changed the transaction
+}

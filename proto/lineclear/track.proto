@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+// Read-only view of the track, and a reset for repeating demonstrations. Internal only.
+package lineclear.track.v1;
+
+service TrackStatus {
+  // Every block section and loop line, with the hold on it, if any.
+  rpc ListSegments(ListSegmentsRequest) returns (ListSegmentsReply);
+
+  // Frees every block section and loop line, as if the line had been restored.
+  // Prepared transactions are aborted; the highest term seen is kept.
+  rpc ReleaseAllHolds(ReleaseAllHoldsRequest) returns (ReleaseAllHoldsReply);
+}
+
+message ListSegmentsRequest {
+  bool held_only = 1;  // only segments that are closed or reserved
+}
+
+message Segment {
+  string code = 1;          // S1 to S10, L1, L2
+  string kind = 2;          // block_section or loop_line
+  string hold = 3;          // none, closure or reservation
+  string hold_state = 4;    // PREPARED or COMMITTED when held
+  string txn_id = 5;
+  string train_number = 6;  // the train a loop line is reserved for
+}
+
+message ListSegmentsReply {
+  repeated Segment segments = 1;
+  int64 highest_term = 2;
+}
+
+message ReleaseAllHoldsRequest {}
+
+message ReleaseAllHoldsReply {
+  int32 released_holds = 1;
+  int32 aborted_transactions = 2;
+}
