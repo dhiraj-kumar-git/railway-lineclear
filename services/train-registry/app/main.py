@@ -1,9 +1,8 @@
 """Train Registry: trains, their routes and stops."""
 
 from contextlib import asynccontextmanager
-
 from fastapi import FastAPI, HTTPException
-
+from prometheus_fastapi_instrumentator import Instrumentator
 from app.db import apply_schema, create_pool
 
 pool = create_pool()
@@ -19,6 +18,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Train Registry", lifespan=lifespan)
 
+Instrumentator(excluded_handlers=["/metrics", "/healthz", "/readyz"]).instrument(app).expose(
+    app, include_in_schema=False
+)
 
 @app.get("/healthz")
 def healthz() -> dict:
