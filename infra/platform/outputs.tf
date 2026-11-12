@@ -34,3 +34,19 @@ output "train_positions_table" {
 output "election_lease_table" {
   value = aws_dynamodb_table.election_lease.name
 }
+
+output "passenger_notification_url" {
+  value = aws_lambda_function_url.passenger_notification.function_url
+}
+
+output "notification_queue_url" {
+  value = aws_sqs_queue.passenger_notifications.url
+}
+
+output "notification_dead_letter_queue_url" {
+  value = aws_sqs_queue.passenger_notifications_dead_letter.url
+}
+
+output "bulletins_bucket" {
+  value = aws_s3_bucket.bulletins.bucket
+}
