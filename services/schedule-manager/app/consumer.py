@@ -3,6 +3,7 @@
 The offset is committed only after the diversion has been handled (at-least-once). If leadership
 is lost first, the consumer closes without committing, and the next leader reads the same event.
 A repeated event is harmless: the coordinator finds the transaction already logged for the incident.
+Before opening the consumer, a new leader finishes whatever the log shows unfinished.
 """
 
 import json
@@ -57,6 +58,14 @@ class IncidentConsumer:
                 self._stopping.wait(1)
                 continue
             if consumer is None:
+                try:
+                    self._coordinator.recover()  # finish what earlier leaders left before any new incident
+                except NotLeader:
+                    continue
+                except Exception:
+                    logger.exception("Recovery did not finish; trying again in 5 seconds")
+                    self._stopping.wait(5)
+                    continue
                 consumer = self._open()
 
             message = consumer.poll(1.0)

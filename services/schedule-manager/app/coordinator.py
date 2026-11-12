@@ -10,6 +10,10 @@ For each reported incident:
 
 The decision is written with "UPDATE ... WHERE state = 'PREPARING'", so of two coordinators that
 somehow race to decide the same transaction, only the first write counts and the other follows it.
+
+Each time a replica becomes the coordinator it first finishes what earlier leaders left in the log
+(recover): PREPARING without a decision is aborted, a logged decision is sent again with the new term.
+A committed diversion is also handed to the passenger notification queue, once, after COMMIT is logged.
 """
 
 import logging
@@ -22,7 +26,9 @@ from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
 
 from app.events import CoordinationEvents
+from app.fault_switch import FaultSwitch
 from app.leadership import Leadership
+from app.notifications import PassengerNotices
 from app.participants import ParticipantClient
 from app.revisions import revised_stops
 from app.train_registry import TrainRegistryClient, TrainRegistryUnavailable
@@ -57,6 +63,8 @@ class Coordinator:
         participants: list[ParticipantClient],
         registry: TrainRegistryClient,
         events: CoordinationEvents,
+        notices: PassengerNotices,
+        fault_switch: FaultSwitch,
         delay_minutes: int,
     ) -> None:
         self._pool = pool
@@ -64,6 +72,8 @@ class Coordinator:
         self._participants = {client.name: client for client in participants}
         self._registry = registry
         self._events = events
+        self._notices = notices
+        self._fault_switch = fault_switch
         self._delay_minutes = delay_minutes
         self._phase_one = ThreadPoolExecutor(max_workers=len(participants), thread_name_prefix="prepare")
 
@@ -184,7 +194,40 @@ class Coordinator:
             prepare_seconds = time.monotonic() - started
             PREPARE_SECONDS.observe(prepare_seconds)
             self._events.transaction_decided(txn, decision, reason, int(prepare_seconds * 1000))
+            if decision == "COMMIT":
+                self._freeze_if_switched(txn)
         self._finish(txn, decided)
+
+    def _freeze_if_switched(self, txn: dict) -> None:
+        """The demo fault switch: freeze right after COMMIT is logged, then act as a frozen process would.
+
+        Renewals stop too, so the lease runs out and the other replica takes over with a higher term and
+        finishes the transaction from the log. On waking, this replica carries on where it stopped and sends
+        COMMIT with the term it had before the freeze, without checking its leadership first: exactly the
+        message fencing exists for, and the participants refuse it.
+        """
+        pause = self._fault_switch.take()
+        if not pause:
+            return
+        txn_id, term = txn["txn_id"], txn["term"]
+        logger.warning("Fault switch: freezing for %d s right after logging COMMIT", pause,
+                       extra={"txn_id": txn_id, "term": term})
+        self._leadership.pause(pause)
+        time.sleep(pause)
+        logger.warning("Woke after %d s; sending COMMIT with term %d as if nothing had happened", pause, term,
+                       extra={"txn_id": txn_id, "term": term})
+        for name, client in self._participants.items():
+            try:
+                client.decide("COMMIT", txn_id, term, self._leadership.candidate_id)
+                logger.info("%s accepted the term %d COMMIT", name, term,
+                            extra={"txn_id": txn_id, "term": term, "participant": name})
+            except grpc.RpcError as error:
+                logger.warning("%s refused the term %d COMMIT: %s: %s", name, term, error.code().name,
+                               error.details(), extra={"txn_id": txn_id, "term": term, "participant": name})
+        if not self._leadership.term_if_leader():
+            logger.warning("No longer the coordinator after the freeze; the new leader finishes %s", txn_id,
+                           extra={"txn_id": txn_id, "term": term})
+            raise NotLeader()
 
     def _log_decision(self, txn: dict, decision: str, reason: str | None, stops: list[dict]) -> str:
         """Write COMMIT or ABORT, unless the transaction was already decided. Returns the decision in the log."""
@@ -219,6 +262,8 @@ class Coordinator:
     def _finish(self, txn: dict, decision: str) -> None:
         """Phase 2: send the decision to every participant that has not acknowledged it yet."""
         txn_id = txn["txn_id"]
+        if decision == "COMMIT":
+            self._notify(txn_id)
         with self._pool.connection() as conn:
             waiting = [
                 row["participant"]
@@ -237,6 +282,19 @@ class Coordinator:
                 )
             logger.info("%s complete: every participant acknowledged %s", txn_id, decision,
                         extra={"txn_id": txn_id, "decision": decision})
+
+    def _notify(self, txn_id: str) -> None:
+        """Hand a committed diversion to the passenger notification queue, unless that was done already."""
+        with self._pool.connection() as conn:
+            txn = conn.execute("SELECT * FROM transactions WHERE txn_id = %s", (txn_id,)).fetchone()
+        if txn["notified_at"] is not None:
+            return
+        if self._notices.send(txn):
+            with self._pool.connection() as conn:
+                conn.execute(
+                    "UPDATE transactions SET notified_at = now() WHERE txn_id = %s AND notified_at IS NULL",
+                    (txn_id,),
+                )
 
     def _deliver(self, name: str, decision: str, txn_id: str) -> bool:
         """Send Commit or Abort to one participant until it acknowledges. False if it refused."""
@@ -280,6 +338,8 @@ class Coordinator:
         if not self._leadership.term_if_leader():
             raise NotLeader()
         if txn["completed_at"] is not None:
+            if txn["state"] == "COMMIT":
+                self._notify(txn["txn_id"])
             logger.info("%s is already complete (%s); nothing to do", txn["txn_id"], txn["state"],
                         extra={"txn_id": txn["txn_id"]})
             return
@@ -288,8 +348,28 @@ class Coordinator:
             decision = self._log_decision(txn, "ABORT", "the coordinator changed before deciding", [])
             if decision == "ABORT":
                 self._events.transaction_decided(txn, "ABORT", "the coordinator changed before deciding", 0)
-        logger.info("Resuming %s to deliver %s", txn["txn_id"], decision, extra={"txn_id": txn["txn_id"]})
+        logger.info("Resuming %s to deliver %s", txn["txn_id"], decision,
+                    extra={"txn_id": txn["txn_id"], "term": self._leadership.term_if_leader()})
         self._finish(txn, decision)
+
+    def recover(self) -> None:
+        """Finish every diversion an earlier leader left unfinished. Run before reading any new incident."""
+        term = self._leadership.term_if_leader()
+        if not term:
+            raise NotLeader()
+        with self._pool.connection() as conn:
+            unfinished = conn.execute(
+                "SELECT * FROM transactions "
+                "WHERE completed_at IS NULL OR (state = 'COMMIT' AND notified_at IS NULL) "
+                "ORDER BY started_at"
+            ).fetchall()
+        if not unfinished:
+            logger.info("Recovery: nothing unfinished in the log", extra={"term": term})
+            return
+        logger.info("Recovery: %d unfinished in the log: %s", len(unfinished),
+                    ", ".join(f"{txn['txn_id']} {txn['state']}" for txn in unfinished), extra={"term": term})
+        for txn in unfinished:
+            self.resume(txn)
 
     def close(self) -> None:
         self._phase_one.shutdown(wait=False)

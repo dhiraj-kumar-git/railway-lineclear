@@ -15,6 +15,7 @@ x-schedule-manager: &schedule-manager
   TRACK_AVAILABILITY_TARGET: track-availability:50051
   INCIDENT_MANAGER_TARGET: incident-manager:50051
   TRAIN_REGISTRY_URL: http://train-registry:8000
+  STAFF_API_KEY: local-staff-key
 
 services:
   postgres:
@@ -100,6 +101,7 @@ services:
     environment:
       <<: *database
       DB_NAME: track
+      COORDINATOR_TARGET: schedule-manager-a:50051 # asked after a restart about anything in doubt
     ports:
       - "50051:50051"
     depends_on:
@@ -111,6 +113,8 @@ services:
     environment:
       <<: [*database, *kafka]
       DB_NAME: incidents
+      COORDINATOR_TARGET: schedule-manager-a:50051 # asked after a restart about anything in doubt
+      STAFF_API_KEY: local-staff-key
     ports:
       - "8002:8000"
     depends_on:
