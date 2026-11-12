@@ -3,3 +3,7 @@ INSERT INTO loop_lines (blocked_section, loop_line)
 SELECT 'S' || n, CASE WHEN n <= 5 THEN 'L1' ELSE 'L2' END
 FROM generate_series(1, 10) AS n
 ON CONFLICT DO NOTHING;
+
+-- The fault switch starts unarmed
+INSERT INTO fault_switch (id) VALUES (true)
+ON CONFLICT DO NOTHING;

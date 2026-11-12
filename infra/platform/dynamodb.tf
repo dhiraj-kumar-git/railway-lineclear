@@ -70,3 +70,33 @@ module "leader_election_pod_identity" {
     }
   }
 }
+
+# One item per committed diversion, written by Passenger Notification and keyed by transaction ID,
+# so a repeated message cannot write a second notice. The index lists one train's notices, newest first.
+resource "aws_dynamodb_table" "passenger_notices" {
+  name         = "${var.project}-passenger-notices"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "txn_id"
+
+  attribute {
+    name = "txn_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "train_number"
+    type = "S"
+  }
+
+  attribute {
+    name = "decided_at"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "by-train"
+    hash_key        = "train_number"
+    range_key       = "decided_at"
+    projection_type = "ALL"
+  }
+}

@@ -21,13 +21,15 @@ spec:
     spec:
       containers:
         - name: track-availability
-          image: 714989832567.dkr.ecr.ap-south-1.amazonaws.com/lineclear/track-availability:02218b9
+          image: 714989832567.dkr.ecr.ap-south-1.amazonaws.com/lineclear/track-availability:3421cc9
           ports:
             - name: grpc
               containerPort: 50051
             - name: metrics
               containerPort: 9100
           env:
+            - name: COORDINATOR_TARGET # asked after a restart about anything still in doubt
+              value: schedule-manager.lineclear.svc.cluster.local:50051
             - name: DB_HOST
               valueFrom:
                 secretKeyRef: { name: track-availability-database, key: host }

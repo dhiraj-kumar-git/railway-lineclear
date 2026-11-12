@@ -21,13 +21,18 @@ spec:
     spec:
       containers:
         - name: incident-manager
-          image: 714989832567.dkr.ecr.ap-south-1.amazonaws.com/lineclear/incident-manager:dcbd5ee
+          image: 714989832567.dkr.ecr.ap-south-1.amazonaws.com/lineclear/incident-manager:1110e09
           ports:
             - name: http
               containerPort: 8000
             - name: grpc
               containerPort: 50051
           env:
+            - name: COORDINATOR_TARGET # asked after a restart about anything still in doubt
+              value: schedule-manager.lineclear.svc.cluster.local:50051
+            - name: STAFF_API_KEY
+              valueFrom:
+                secretKeyRef: { name: staff-api-key, key: api-key }
             - name: DB_HOST
               valueFrom:
                 secretKeyRef: { name: incident-manager-database, key: host }

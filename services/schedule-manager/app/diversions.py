@@ -4,7 +4,7 @@ from psycopg_pool import ConnectionPool
 
 SUMMARY_COLUMNS = (
     "txn_id, incident_id, train_number, blocked_section, loop_line, term, coordinator_id, "
-    "state, reason, started_at, decided_at, completed_at"
+    "state, reason, started_at, decided_at, completed_at, notified_at"
 )
 
 

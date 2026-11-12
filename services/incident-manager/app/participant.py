@@ -29,8 +29,15 @@ class DecisionConflict(Exception):
     """The transaction was already decided the other way."""
 
 
-def _check_term(conn: Connection, term: int) -> None:
+def _check_term(conn: Connection, term: int | None) -> None:
+    """Lock the fence row, refuse a lower term and remember a higher one.
+
+    None means the decision was read from the coordinator's log after a restart (recovery.py). It is
+    not an order from a leader, so it is not fenced; the row is still locked to keep calls in turn.
+    """
     row = conn.execute("SELECT highest_term FROM term_fence WHERE id FOR UPDATE").fetchone()
+    if term is None:
+        return
     if term < row["highest_term"]:
         raise StaleTerm(term, row["highest_term"])
     if term > row["highest_term"]:
@@ -112,7 +119,7 @@ class IncidentParticipant:
             )
             return "YES", "", True
 
-    def commit(self, txn_id: str, term: int) -> tuple[str, dict | None]:
+    def commit(self, txn_id: str, term: int | None) -> tuple[str, dict | None]:
         """Move the incident to Mitigating.
 
         Returns (state, change); change describes the new status, or is None for a repeated Commit.
@@ -145,7 +152,8 @@ class IncidentParticipant:
                 (txn["incident_id"], note, txn_id),
             )
             conn.execute(
-                "UPDATE transactions SET state = 'COMMITTED', term = %s, updated_at = now() WHERE txn_id = %s",
+                "UPDATE transactions SET state = 'COMMITTED', term = COALESCE(%s, term), updated_at = now() "
+                "WHERE txn_id = %s",
                 (term, txn_id),
             )
             logger.info(
@@ -154,7 +162,7 @@ class IncidentParticipant:
             )
             return "COMMITTED", {"incident_id": txn["incident_id"], "status": "MITIGATING", "note": note}
 
-    def abort(self, txn_id: str, term: int, coordinator_id: str) -> tuple[str, bool]:
+    def abort(self, txn_id: str, term: int | None, coordinator_id: str) -> tuple[str, bool]:
         """Release the incident. Returns (state, changed); changed is False for a repeat."""
         with self._pool.connection() as conn:
             _check_term(conn, term)
@@ -177,11 +185,20 @@ class IncidentParticipant:
                 (txn_id,),
             )
             conn.execute(
-                "UPDATE transactions SET state = 'ABORTED', term = %s, updated_at = now() WHERE txn_id = %s",
+                "UPDATE transactions SET state = 'ABORTED', term = COALESCE(%s, term), updated_at = now() "
+                "WHERE txn_id = %s",
                 (term, txn_id),
             )
             logger.info("Aborted and released the incident", extra={"txn_id": txn_id, "term": term})
             return "ABORTED", True
+
+    def in_doubt(self) -> list[str]:
+        """Transactions this participant voted YES for whose outcome has not arrived yet."""
+        with self._pool.connection() as conn:
+            rows = conn.execute(
+                "SELECT txn_id FROM transactions WHERE state = 'PREPARED' ORDER BY updated_at"
+            ).fetchall()
+        return [row["txn_id"] for row in rows]
 
     def decision(self, txn_id: str) -> dict | None:
         with self._pool.connection() as conn:

@@ -4,19 +4,27 @@ import os
 import socket
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from prometheus_fastapi_instrumentator import Instrumentator
+from pydantic import BaseModel, Field
 
 from app.consumer import IncidentConsumer
 from app.coordinator import Coordinator
 from app.db import apply_schema, create_pool
 from app.diversions import DiversionLog
 from app.events import CoordinationEvents
+from app.fault_switch import FaultSwitch
 from app.grpc_server import GrpcServer
 from app.leadership import Leadership
+from app.notifications import PassengerNotices
 from app.participants import ParticipantClient
+from app.staff import require_staff
 from app.telemetry import configure_logging
 from app.train_registry import TrainRegistryClient
+
+
+class FaultSwitchRequest(BaseModel):
+    pause_seconds: int = Field(default=20, ge=5, le=120)
 
 
 @asynccontextmanager
@@ -35,8 +43,9 @@ async def lifespan(app: FastAPI):
     ]
     registry = TrainRegistryClient()
     events = CoordinationEvents()
-    coordinator = Coordinator(pool, leadership, participants, registry, events,
-                              int(os.environ.get("DIVERSION_DELAY_MINUTES", "25")))
+    app.state.fault_switch = FaultSwitch(pool)
+    coordinator = Coordinator(pool, leadership, participants, registry, events, PassengerNotices(),
+                              app.state.fault_switch, int(os.environ.get("DIVERSION_DELAY_MINUTES", "25")))
     consumer = IncidentConsumer(leadership, coordinator)
     app.state.leadership = leadership
     app.state.log = DiversionLog(pool)
@@ -103,3 +112,14 @@ def revised_times(train_number: str) -> dict:
     if txn is None:
         raise HTTPException(status_code=404, detail=f"No committed diversion for train {train_number}")
     return txn
+
+
+@app.get("/api/schedule/fault-switch")
+def fault_switch_status() -> dict:
+    return app.state.fault_switch.status()
+
+
+@app.post("/api/schedule/fault-switch", dependencies=[Depends(require_staff)])
+def arm_fault_switch(request: FaultSwitchRequest) -> dict:
+    """Staff only: the coordinator freezes for pause_seconds right after it next logs COMMIT."""
+    return app.state.fault_switch.arm(request.pause_seconds)

@@ -1,9 +1,10 @@
 """Incident Manager: track incidents over REST, and the incident's side of two-phase commit over gRPC."""
 
+import os
 from contextlib import asynccontextmanager
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel, Field
 
@@ -12,6 +13,8 @@ from app.events import IncidentEvents
 from app.grpc_server import GrpcServer
 from app.incidents import IncidentBusy, IncidentNotFound, IncidentStore
 from app.participant import IncidentParticipant
+from app.recovery import InDoubtRecovery
+from app.staff import require_staff
 from app.telemetry import configure_logging
 
 
@@ -34,9 +37,23 @@ async def lifespan(app: FastAPI):
     apply_schema(pool)
     app.state.store = IncidentStore(pool)
     app.state.events = IncidentEvents()
-    app.state.grpc = GrpcServer(IncidentParticipant(pool), app.state.events)
+    participant = IncidentParticipant(pool)
+    app.state.grpc = GrpcServer(participant, app.state.events)
     app.state.grpc.start()
+
+    # Settle anything left PREPARED by a previous run, by asking the coordinator's log
+    def committed(txn_id: str, result: tuple) -> None:
+        change = result[1]
+        if change is not None:  # sent only after the database change is committed, as for a Commit call
+            app.state.events.status_changed(change["incident_id"], change["status"], change["note"], txn_id)
+
+    recovery = None
+    if os.environ.get("COORDINATOR_TARGET"):
+        recovery = InDoubtRecovery(participant, os.environ["COORDINATOR_TARGET"], on_commit=committed)
+        recovery.start()
     yield
+    if recovery is not None:
+        recovery.stop()
     app.state.grpc.stop()
     app.state.events.close()
     pool.close()
@@ -84,7 +101,7 @@ def get_incident(incident_id: str) -> dict:
         raise HTTPException(status_code=404, detail=f"Incident {incident_id} not found")
 
 
-@app.post("/api/incidents/{incident_id}/resolve")
+@app.post("/api/incidents/{incident_id}/resolve", dependencies=[Depends(require_staff)])
 def resolve_incident(incident_id: str, resolution: Resolution) -> dict:
     try:
         incident = app.state.store.resolve(incident_id, resolution.note)

@@ -12,6 +12,7 @@ from prometheus_client import Counter, start_http_server
 
 from app.db import apply_schema, create_pool
 from app.participant import DecisionConflict, StaleTerm, TrackParticipant, UnknownTransaction
+from app.recovery import InDoubtRecovery
 from app.telemetry import MetricsInterceptor, configure_logging
 from lineclear import participant_pb2, participant_pb2_grpc, track_pb2, track_pb2_grpc
 
@@ -159,6 +160,12 @@ def serve() -> None:
     health_servicer.set("", health_pb2.HealthCheckResponse.SERVING)
     logger.info("Track Availability listening on %d, metrics on %d", GRPC_PORT, METRICS_PORT)
 
+    # Settle anything left PREPARED by a previous run, by asking the coordinator's log
+    recovery = None
+    if os.environ.get("COORDINATOR_TARGET"):
+        recovery = InDoubtRecovery(participant, os.environ["COORDINATOR_TARGET"])
+        recovery.start()
+
     def stop(signum, frame):
         # Report not serving first, so Kubernetes stops sending calls, then finish the ones in flight
         health_servicer.enter_graceful_shutdown()
@@ -167,6 +174,8 @@ def serve() -> None:
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     server.wait_for_termination()
+    if recovery is not None:
+        recovery.stop()
     pool.close()
 
 
