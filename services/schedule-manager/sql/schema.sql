@@ -48,3 +48,16 @@ CREATE TABLE IF NOT EXISTS schedule_revisions (
     delay_minutes   integer NOT NULL,
     PRIMARY KEY (txn_id, stop_seq)
 );
+
+-- When a committed diversion was handed to the passenger notification queue.
+-- A new leader sends any COMMIT that has none, so a notice is never lost to a crash.
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS notified_at timestamptz;
+
+-- The demo fault switch, one row. When armed, the coordinator freezes right after it next logs
+-- COMMIT, as if its process had stopped, so the hand-over to the other replica can be shown on demand.
+CREATE TABLE IF NOT EXISTS fault_switch (
+    id            boolean PRIMARY KEY DEFAULT true CHECK (id), -- only one row can exist
+    armed         boolean NOT NULL DEFAULT false,
+    pause_seconds integer NOT NULL DEFAULT 0,
+    armed_at      timestamptz
+);
