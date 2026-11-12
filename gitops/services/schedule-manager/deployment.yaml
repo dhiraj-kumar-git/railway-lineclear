@@ -19,9 +19,10 @@ spec:
         app.kubernetes.io/name: schedule-manager
         app.kubernetes.io/part-of: railway-lineclear
     spec:
+      serviceAccountName: schedule-manager # its Pod Identity role may send to the notification queue
       containers:
         - name: schedule-manager
-          image: 714989832567.dkr.ecr.ap-south-1.amazonaws.com/lineclear/schedule-manager:20151db
+          image: 714989832567.dkr.ecr.ap-south-1.amazonaws.com/lineclear/schedule-manager:4ed08f2
           ports:
             - name: http
               containerPort: 8000
@@ -43,6 +44,13 @@ spec:
               value: http://train-registry.lineclear.svc.cluster.local
             - name: DIVERSION_DELAY_MINUTES
               value: "25"
+            - name: NOTIFICATION_QUEUE_NAME
+              value: lineclear-passenger-notifications
+            - name: AWS_REGION
+              value: ap-south-1
+            - name: STAFF_API_KEY
+              valueFrom:
+                secretKeyRef: { name: staff-api-key, key: api-key }
             - name: DB_HOST
               valueFrom:
                 secretKeyRef: { name: schedule-manager-database, key: host }
