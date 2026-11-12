@@ -14,6 +14,7 @@ dependencies = [
     "grpcio-reflection>=1.80",
     "protobuf>=6.31",
     "prometheus-fastapi-instrumentator>=7.0",
+    "boto3>=1.35",
 ]
 
 [dependency-groups]
