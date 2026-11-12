@@ -3,6 +3,8 @@
 The lease in Leader Election lasts 6 seconds. This replica acts as leader for at most 4 seconds after
 its last successful renewal, so it stops coordinating before the lease can pass to another replica,
 even if Leader Election cannot be reached.
+
+pause() stops the renewals for a while, as if the whole process had frozen; the fault switch uses it.
 """
 
 import logging
@@ -33,6 +35,7 @@ class Leadership:
         self._term = 0
         self._leader_id = ""
         self._valid_until = 0.0  # time.monotonic() after which this replica stops acting as leader
+        self._paused_until = 0.0  # no renewals before this time.monotonic()
         self._stopping = threading.Event()
         self._thread = threading.Thread(target=self._run, name="leadership", daemon=True)
 
@@ -43,6 +46,11 @@ class Leadership:
         self._stopping.set()
         self._thread.join(timeout=5)
         self._channel.close()
+
+    def pause(self, seconds: float) -> None:
+        """Stop renewing for this many seconds. For the demo fault switch only."""
+        with self._lock:
+            self._paused_until = time.monotonic() + seconds
 
     def term_if_leader(self) -> int:
         """The current term while this replica may act as leader, else 0."""
@@ -62,7 +70,8 @@ class Leadership:
     def _run(self) -> None:
         leading = False
         while not self._stopping.is_set():
-            self._renew()
+            if time.monotonic() >= self._paused_until:
+                self._renew()
             now_leading = self.term_if_leader() > 0
             if leading and not now_leading:
                 logger.warning("Stopped acting as coordinator for term %d", self._term, extra={"term": self._term})
