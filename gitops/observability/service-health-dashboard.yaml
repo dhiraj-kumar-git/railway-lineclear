@@ -1,0 +1,311 @@
+# Rate, errors and duration for every service
+# Grafana's sidecar loads every ConfigMap labelled grafana_dashboard: "1".
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: service-health-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  service-health.json: |
+    {
+      "uid": "lineclear-service-health",
+      "title": "Railway LineClear: service health",
+      "description": "Rate, errors and duration for every service",
+      "tags": ["railway-lineclear"],
+      "timezone": "browser",
+      "editable": true,
+      "schemaVersion": 39,
+      "refresh": "10s",
+      "time": {"from": "now-1h", "to": "now"},
+      "panels": [
+        {
+          "type": "row",
+          "title": "Public REST APIs",
+          "collapsed": false,
+          "panels": [],
+          "id": 1,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0}
+        },
+        {
+          "type": "stat",
+          "title": "Requests per second, all REST APIs",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(rate(http_requests_total{namespace=\"lineclear\"}[1m]))",
+              "legendFormat": "",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+          "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "textMode": "value"},
+          "id": 2,
+          "gridPos": {"h": 4, "w": 6, "x": 0, "y": 1}
+        },
+        {
+          "type": "stat",
+          "title": "Server errors, share of requests",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "(sum(rate(http_requests_total{namespace=\"lineclear\",status=\"5xx\"}[5m])) or vector(0)) / sum(rate(http_requests_total{namespace=\"lineclear\"}[5m]))",
+              "legendFormat": "",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 0.05}]}
+            },
+            "overrides": []
+          },
+          "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "textMode": "value"},
+          "id": 3,
+          "gridPos": {"h": 4, "w": 6, "x": 6, "y": 1}
+        },
+        {
+          "type": "stat",
+          "title": "p95 response time, all REST APIs",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_highr_seconds_bucket{namespace=\"lineclear\"}[5m])))",
+              "legendFormat": "",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "orange", "value": 0.25},
+                  {"color": "red", "value": 0.5}
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "textMode": "value"},
+          "id": 4,
+          "gridPos": {"h": 4, "w": 6, "x": 12, "y": 1}
+        },
+        {
+          "type": "stat",
+          "title": "Services answering their scrape",
+          "description": "Pods Prometheus can read metrics from in lineclear",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(up{namespace=\"lineclear\"})",
+              "legendFormat": "",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+          "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "textMode": "value"},
+          "id": 5,
+          "gridPos": {"h": 4, "w": 6, "x": 18, "y": 1}
+        },
+        {
+          "type": "timeseries",
+          "title": "Requests per second by service",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (service) (rate(http_requests_total{namespace=\"lineclear\"}[1m]))",
+              "legendFormat": "{{service}}",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "reqps", "custom": {"drawStyle": "line", "fillOpacity": 10, "showPoints": "never"}},
+            "overrides": []
+          },
+          "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+          "id": 6,
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 5}
+        },
+        {
+          "type": "timeseries",
+          "title": "Server errors by service, share of requests",
+          "description": "5xx answers divided by all answers. The alert fires above 5%.",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "(sum by (service) (rate(http_requests_total{namespace=\"lineclear\",status=\"5xx\"}[1m])) or sum by (service) (rate(http_requests_total{namespace=\"lineclear\"}[1m])) * 0) / sum by (service) (rate(http_requests_total{namespace=\"lineclear\"}[1m]))",
+              "legendFormat": "{{service}}",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "showPoints": "never",
+                "thresholdsStyle": {"mode": "dashed"}
+              },
+              "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 0.05}]}
+            },
+            "overrides": []
+          },
+          "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+          "id": 7,
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 5}
+        },
+        {
+          "type": "timeseries",
+          "title": "p95 response time by service",
+          "description": "Time inside the service, from the fine-grained histogram. The load test's limit is 0.5 s at the client.",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "histogram_quantile(0.95, sum by (le, service) (rate(http_request_duration_highr_seconds_bucket{namespace=\"lineclear\"}[1m])))",
+              "legendFormat": "{{service}}",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "showPoints": "never",
+                "thresholdsStyle": {"mode": "dashed"}
+              },
+              "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 0.5}]}
+            },
+            "overrides": []
+          },
+          "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+          "id": 8,
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 5}
+        },
+        {
+          "type": "timeseries",
+          "title": "Requests per second by endpoint",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (service, handler, status) (rate(http_requests_total{namespace=\"lineclear\"}[1m]))",
+              "legendFormat": "{{service}} {{handler}} {{status}}",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "reqps", "custom": {"drawStyle": "line", "fillOpacity": 10, "showPoints": "never"}},
+            "overrides": []
+          },
+          "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+          "id": 9,
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 13}
+        },
+        {
+          "type": "timeseries",
+          "title": "Share of requests answered within 100 ms, by endpoint",
+          "description": "The per-endpoint histogram only has 0.1, 0.5 and 1 s buckets, so this shows the share under 100 ms rather than a p95.",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (service, handler) (rate(http_request_duration_seconds_bucket{namespace=\"lineclear\",le=\"0.1\"}[5m])) / sum by (service, handler) (rate(http_request_duration_seconds_count{namespace=\"lineclear\"}[5m]))",
+              "legendFormat": "{{service}} {{handler}}",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "percentunit", "custom": {"drawStyle": "line", "fillOpacity": 10, "showPoints": "never"}},
+            "overrides": []
+          },
+          "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+          "id": 10,
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 13}
+        },
+        {
+          "type": "row",
+          "title": "Internal gRPC calls (2PC and election)",
+          "collapsed": false,
+          "panels": [],
+          "id": 11,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 21}
+        },
+        {
+          "type": "timeseries",
+          "title": "gRPC calls per second by method",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (service, grpc_method) (rate(grpc_server_handled_total{namespace=\"lineclear\"}[1m]))",
+              "legendFormat": "{{service}} {{grpc_method}}",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "reqps", "custom": {"drawStyle": "line", "fillOpacity": 10, "showPoints": "never"}},
+            "overrides": []
+          },
+          "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+          "id": 12,
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 22}
+        },
+        {
+          "type": "timeseries",
+          "title": "gRPC calls refused or failed, per second by code",
+          "description": "FAILED_PRECONDITION here is a participant refusing an old term: expected during the leader freeze.",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (service, grpc_code) (rate(grpc_server_handled_total{namespace=\"lineclear\",grpc_code!=\"OK\"}[1m]))",
+              "legendFormat": "{{service}} {{grpc_code}}",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "reqps", "custom": {"drawStyle": "line", "fillOpacity": 10, "showPoints": "never"}},
+            "overrides": []
+          },
+          "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+          "id": 13,
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 22}
+        },
+        {
+          "type": "timeseries",
+          "title": "p95 gRPC answer time by service",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "histogram_quantile(0.95, sum by (le, service) (rate(grpc_server_handling_seconds_bucket{namespace=\"lineclear\"}[1m])))",
+              "legendFormat": "{{service}}",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "s", "custom": {"drawStyle": "line", "fillOpacity": 10, "showPoints": "never"}},
+            "overrides": []
+          },
+          "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+          "id": 14,
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 22}
+        }
+      ],
+      "templating": {"list": []}
+    }

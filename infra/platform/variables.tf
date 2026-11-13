@@ -26,7 +26,7 @@ variable "kafka_version" {
 }
 
 variable "enable_emr" {
-  description = "Create the EMR cluster that runs the Flink job, with the load balancer that carries its logs to Loki. Leave false except while running or showing the job."
+  description = "Create the EMR cluster that runs the Flink job. Leave false except while running or showing the job."
   type        = bool
   default     = false
 }

@@ -1,5 +1,6 @@
-# Loki on a fixed port of every node. While EMR runs, the internal load balancer that
-# Terraform creates (infra/platform/loki_access.tf) forwards the Flink logs here.
+# Loki on a fixed port of every node. The internal load balancer that Terraform creates
+# (infra/platform/loki_access.tf) forwards logs from outside the cluster here: the Flink
+# logs while EMR runs, and the Lambda logs from the log forwarder.
 apiVersion: v1
 kind: Service
 metadata:

@@ -1,0 +1,39 @@
+# Two alert rules, evaluated by Prometheus. Alertmanager is off in this stack, so a firing alert
+# shows on Prometheus's and Grafana's alert pages and is not sent anywhere.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: railway-lineclear-alerts
+  namespace: monitoring
+spec:
+  groups:
+    - name: duty-controller
+      interval: 5s # checked often, so 10 seconds without a leader is noticed within a few seconds
+      rules:
+        - alert: NoDutyController
+          # No live coordinator lease, or Leader Election itself is not reporting
+          expr: |
+            max(lineclear_election_has_leader{election="schedule-coordinator"}) < 1
+            or absent(lineclear_election_has_leader{election="schedule-coordinator"})
+          for: 10s
+          labels:
+            severity: critical
+          annotations:
+            summary: No Schedule Manager replica holds the coordinator lease
+            description: Nobody has been elected for 10 seconds, so no diversion can be decided until a replica takes the lease.
+    - name: service-errors
+      rules:
+        - alert: HighServerErrorRate
+          # More than 5% of a service's answers are 5xx, while it serves at least one request every 10 seconds
+          expr: |
+            (
+              sum by (service) (rate(http_requests_total{namespace="lineclear",status="5xx"}[1m]))
+                / sum by (service) (rate(http_requests_total{namespace="lineclear"}[1m]))
+            ) > 0.05
+            and on (service) sum by (service) (rate(http_requests_total{namespace="lineclear"}[1m])) > 0.1
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.service }} answers more than 5% of requests with a server error"
+            description: "{{ $value | humanizePercentage }} of {{ $labels.service }}'s answers over the last minute were 5xx."

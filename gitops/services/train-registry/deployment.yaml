@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: train-registry
-          image: 714989832567.dkr.ecr.ap-south-1.amazonaws.com/lineclear/train-registry:63e913d
+          image: 714989832567.dkr.ecr.ap-south-1.amazonaws.com/lineclear/train-registry:36a79f8
           ports:
             - name: http
               containerPort: 8000

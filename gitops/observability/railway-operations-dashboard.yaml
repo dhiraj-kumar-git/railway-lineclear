@@ -1,0 +1,406 @@
+# The duty controller, diversions and the Flink results
+# Grafana's sidecar loads every ConfigMap labelled grafana_dashboard: "1".
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: railway-operations-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  railway-operations.json: |
+    {
+      "uid": "lineclear-railway-operations",
+      "title": "Railway LineClear: railway operations",
+      "description": "The duty controller, diversions and the Flink results",
+      "tags": ["railway-lineclear"],
+      "timezone": "browser",
+      "editable": true,
+      "schemaVersion": 39,
+      "refresh": "10s",
+      "time": {"from": "now-1h", "to": "now"},
+      "panels": [
+        {
+          "type": "row",
+          "title": "Duty controller and diversions",
+          "collapsed": false,
+          "panels": [],
+          "id": 1,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0}
+        },
+        {
+          "type": "stat",
+          "title": "Duty controller on shift",
+          "description": "From Leader Election's lease watcher. The alert fires after 10 s of No.",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "max(lineclear_election_has_leader{election=\"schedule-coordinator\"})",
+              "legendFormat": "",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {"1": {"text": "Yes", "color": "green"}, "0": {"text": "No", "color": "red"}}
+                }
+              ]
+            },
+            "overrides": []
+          },
+          "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "textMode": "value"},
+          "id": 2,
+          "gridPos": {"h": 4, "w": 6, "x": 0, "y": 1}
+        },
+        {
+          "type": "stat",
+          "title": "Current term",
+          "description": "The shift number: it goes up by one at every election.",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "max(lineclear_election_term{election=\"schedule-coordinator\"})",
+              "legendFormat": "",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+          "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "textMode": "value"},
+          "id": 3,
+          "gridPos": {"h": 4, "w": 6, "x": 6, "y": 1}
+        },
+        {
+          "type": "stat",
+          "title": "Diversions committed, last 24 h",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(increase(lineclear_transactions_total{decision=\"commit\"}[24h])) or vector(0)",
+              "legendFormat": "",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+          "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "textMode": "value"},
+          "id": 4,
+          "gridPos": {"h": 4, "w": 6, "x": 12, "y": 1}
+        },
+        {
+          "type": "stat",
+          "title": "Diversions aborted, last 24 h",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(increase(lineclear_transactions_total{decision=\"abort\"}[24h])) or vector(0)",
+              "legendFormat": "",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+          "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "textMode": "value"},
+          "id": 5,
+          "gridPos": {"h": 4, "w": 6, "x": 18, "y": 1}
+        },
+        {
+          "type": "timeseries",
+          "title": "Which Schedule Manager replica is the coordinator",
+          "description": "1 while the replica leads. A handover shows as the lines swapping.",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "lineclear_coordinator_is_leader",
+              "legendFormat": "{{pod}}",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "short", "custom": {"drawStyle": "line", "fillOpacity": 10, "showPoints": "never"}},
+            "overrides": []
+          },
+          "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+          "id": 6,
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 5}
+        },
+        {
+          "type": "timeseries",
+          "title": "Diversions decided, per 5 minutes",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (decision) (increase(lineclear_transactions_total[5m]))",
+              "legendFormat": "{{decision}}",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "short", "custom": {"drawStyle": "bars", "fillOpacity": 60, "showPoints": "never"}},
+            "overrides": []
+          },
+          "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+          "id": 7,
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 5}
+        },
+        {
+          "type": "timeseries",
+          "title": "Elections and old-term calls refused, per 5 minutes",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(increase(lineclear_elections_total[5m]))",
+              "legendFormat": "elections",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            },
+            {
+              "refId": "B",
+              "expr": "sum by (service) (increase(lineclear_participant_stale_term_rejections_total[5m]))",
+              "legendFormat": "refused by {{service}}",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "short", "custom": {"drawStyle": "bars", "fillOpacity": 60, "showPoints": "never"}},
+            "overrides": []
+          },
+          "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+          "id": 8,
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 5}
+        },
+        {
+          "type": "timeseries",
+          "title": "p95 time to collect the votes",
+          "description": "From the first Prepare to the decision. Each participant has 2 s to answer.",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "histogram_quantile(0.95, sum by (le) (rate(lineclear_transaction_prepare_seconds_bucket[5m])))",
+              "legendFormat": "prepare p95",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "s", "custom": {"drawStyle": "line", "fillOpacity": 10, "showPoints": "never"}},
+            "overrides": []
+          },
+          "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+          "id": 9,
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 13}
+        },
+        {
+          "type": "timeseries",
+          "title": "Participant votes, per 5 minutes",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (service, vote) (increase(lineclear_participant_votes_total[5m]))",
+              "legendFormat": "{{service}} {{vote}}",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "short", "custom": {"drawStyle": "bars", "fillOpacity": 60, "showPoints": "never"}},
+            "overrides": []
+          },
+          "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+          "id": 10,
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 13}
+        },
+        {
+          "type": "timeseries",
+          "title": "Leader term over time",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "max(lineclear_election_term{election=\"schedule-coordinator\"})",
+              "legendFormat": "term",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "short", "custom": {"drawStyle": "line", "fillOpacity": 10, "showPoints": "never"}},
+            "overrides": []
+          },
+          "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+          "id": 11,
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 13}
+        },
+        {
+          "type": "row",
+          "title": "From the Flink job (newest closed window)",
+          "collapsed": false,
+          "panels": [],
+          "id": 12,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 21}
+        },
+        {
+          "type": "bargauge",
+          "title": "Distinct trains per section, last closed minute",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "lineclear_section_trains",
+              "legendFormat": "{{section}}",
+              "instant": true,
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+          "options": {"orientation": "horizontal", "displayMode": "gradient", "reduceOptions": {"calcs": ["lastNotNull"]}},
+          "id": 13,
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 22}
+        },
+        {
+          "type": "bargauge",
+          "title": "Position updates per section, last closed minute",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "lineclear_section_updates",
+              "legendFormat": "{{section}}",
+              "instant": true,
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+          "options": {"orientation": "horizontal", "displayMode": "gradient", "reduceOptions": {"calcs": ["lastNotNull"]}},
+          "id": 14,
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 22}
+        },
+        {
+          "type": "bargauge",
+          "title": "Incidents reported per section, last closed 5 minutes",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "lineclear_section_incidents",
+              "legendFormat": "{{section}}",
+              "instant": true,
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+          "options": {"orientation": "horizontal", "displayMode": "gradient", "reduceOptions": {"calcs": ["lastNotNull"]}},
+          "id": 15,
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 22}
+        },
+        {
+          "type": "timeseries",
+          "title": "Time without a duty controller, per minute",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "lineclear_coordination_leaderless_ms",
+              "legendFormat": "milliseconds",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "ms", "custom": {"drawStyle": "line", "fillOpacity": 10, "showPoints": "never"}},
+            "overrides": []
+          },
+          "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+          "id": 16,
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 30}
+        },
+        {
+          "type": "timeseries",
+          "title": "Commits and aborts per minute",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "lineclear_coordination_commits",
+              "legendFormat": "commits",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            },
+            {
+              "refId": "B",
+              "expr": "lineclear_coordination_aborts",
+              "legendFormat": "aborts",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            },
+            {
+              "refId": "C",
+              "expr": "lineclear_coordination_elections",
+              "legendFormat": "elections",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "short", "custom": {"drawStyle": "line", "fillOpacity": 10, "showPoints": "never"}},
+            "overrides": []
+          },
+          "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+          "id": 17,
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 30}
+        },
+        {
+          "type": "timeseries",
+          "title": "Flink results read, per minute",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (metric) (rate(lineclear_ops_results_total[5m])) * 60",
+              "legendFormat": "{{metric}}",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            },
+            {
+              "refId": "B",
+              "expr": "sum(rate(lineclear_late_positions_total[5m])) * 60",
+              "legendFormat": "late position reports",
+              "datasource": {"type": "prometheus", "uid": "prometheus"}
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {"unit": "short", "custom": {"drawStyle": "line", "fillOpacity": 10, "showPoints": "never"}},
+            "overrides": []
+          },
+          "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+          "id": 18,
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 30}
+        },
+        {
+          "type": "row",
+          "title": "Diversion log lines",
+          "collapsed": false,
+          "panels": [],
+          "id": 19,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 38}
+        },
+        {
+          "type": "logs",
+          "title": "Lines that carry a transaction ID, from every service",
+          "description": "Search one diversion in Explore with {app=~\".+\"} | json | txn_id=\"T-101\"",
+          "datasource": {"type": "loki", "uid": "loki"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "{app=~\".+\"} | json | __error__=\"\" | txn_id != \"\"",
+              "datasource": {"type": "loki", "uid": "loki"}
+            }
+          ],
+          "options": {"showTime": true, "wrapLogMessage": true, "sortOrder": "Descending"},
+          "id": 20,
+          "gridPos": {"h": 10, "w": 24, "x": 0, "y": 39}
+        }
+      ],
+      "templating": {"list": []}
+    }

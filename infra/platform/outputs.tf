@@ -60,5 +60,5 @@ output "emr_cluster_id" {
 }
 
 output "loki_internal_address" {
-  value = try(aws_lb.loki[0].dns_name, null)
+  value = aws_lb.loki.dns_name
 }
