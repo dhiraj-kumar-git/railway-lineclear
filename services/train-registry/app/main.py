@@ -4,12 +4,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from prometheus_fastapi_instrumentator import Instrumentator
 from app.db import apply_schema, create_pool
+from app.telemetry import configure_logging
 
 pool = create_pool()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    configure_logging()
     pool.open(wait=True, timeout=30)
     apply_schema(pool)
     yield
