@@ -10,4 +10,4 @@ spec:
   endpoints:
     - port: metrics
       path: /metrics
-      interval: 15s
+      interval: 5s # often enough for the no-leader alert, which waits 10 s
