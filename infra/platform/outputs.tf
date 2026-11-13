@@ -50,3 +50,15 @@ output "notification_dead_letter_queue_url" {
 output "bulletins_bucket" {
   value = aws_s3_bucket.bulletins.bucket
 }
+
+output "analytics_bucket" {
+  value = aws_s3_bucket.analytics.id
+}
+
+output "emr_cluster_id" {
+  value = try(aws_emr_cluster.analytics[0].id, null) # null while enable_emr is false
+}
+
+output "loki_internal_address" {
+  value = try(aws_lb.loki[0].dns_name, null)
+}

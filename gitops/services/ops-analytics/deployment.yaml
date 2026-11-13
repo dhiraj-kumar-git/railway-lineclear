@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ops-analytics
+  namespace: lineclear
+  labels:
+    app.kubernetes.io/name: ops-analytics
+    app.kubernetes.io/part-of: railway-lineclear
+spec:
+  replicas: 1 # one reader is enough; a second pod would only wait for a partition
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ops-analytics
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ops-analytics
+        app.kubernetes.io/part-of: railway-lineclear
+    spec:
+      serviceAccountName: ops-analytics
+      containers:
+        - name: ops-analytics
+          image: 714989832567.dkr.ecr.ap-south-1.amazonaws.com/lineclear/ops-analytics:9f601a9
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                secretKeyRef: { name: kafka-connection, key: bootstrap_servers }
+            - name: KAFKA_SECURITY_PROTOCOL
+              valueFrom:
+                secretKeyRef: { name: kafka-connection, key: security_protocol }
+            - name: RESULTS_TABLE
+              value: lineclear-ops-results
+            - name: AWS_REGION
+              value: ap-south-1
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5 # the Kafka check waits up to 3 seconds
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10

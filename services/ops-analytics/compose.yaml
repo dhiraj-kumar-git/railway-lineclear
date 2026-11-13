@@ -1,0 +1,84 @@
+# The analytics pipeline on the laptop: one Kafka broker with the four topics, a Flink
+# JobManager and TaskManager, DynamoDB Local and the reader. The job is submitted with the
+# SQL client inside the JobManager container. The keys here are for local containers only.
+services:
+  kafka:
+    image: apache/kafka:3.9.1
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+  kafka-topics:
+    image: apache/kafka:3.9.1
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        for topic in train.positions:6 incident.events:3 coordination.events:3 ops.results:3; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists \
+            --topic "$${topic%%:*}" --partitions "$${topic##*:}" --replication-factor 1
+        done
+  jobmanager:
+    build: flink
+    command: jobmanager
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: jobmanager
+        state.checkpoints.dir: file:///checkpoints
+        restart-strategy.type: fixed-delay
+        restart-strategy.fixed-delay.attempts: 20
+        restart-strategy.fixed-delay.delay: 5 s
+    ports:
+      - "8081:8081" # Flink's web UI and REST API
+    volumes:
+      - checkpoints:/checkpoints
+      - ./flink:/opt/ops-analytics:ro
+  taskmanager:
+    build: flink
+    command: taskmanager
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 4
+        state.checkpoints.dir: file:///checkpoints
+    volumes:
+      - checkpoints:/checkpoints
+    depends_on:
+      - jobmanager
+  dynamodb:
+    image: amazon/dynamodb-local:latest
+    command: ["-jar", "DynamoDBLocal.jar", "-inMemory", "-sharedDb"]
+  ops-analytics:
+    build: .
+    restart: on-failure # starts again if DynamoDB Local was not listening yet
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_SECURITY_PROTOCOL: PLAINTEXT
+      RESULTS_TABLE: lineclear-ops-results
+      AWS_REGION: ap-south-1
+      DYNAMODB_ENDPOINT_URL: http://dynamodb:8000
+      AWS_ACCESS_KEY_ID: local # DynamoDB Local accepts any key
+      AWS_SECRET_ACCESS_KEY: local
+    ports:
+      - "8005:8000"
+    depends_on:
+      kafka-topics:
+        condition: service_completed_successfully
+      dynamodb:
+        condition: service_started
+volumes:
+  checkpoints:

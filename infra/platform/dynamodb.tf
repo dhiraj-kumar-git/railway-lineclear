@@ -100,3 +100,44 @@ resource "aws_dynamodb_table" "passenger_notices" {
     projection_type = "ALL"
   }
 }
+
+# Flink's window results, one item per result key, so a result written twice is stored once
+resource "aws_dynamodb_table" "ops_results" {
+  name         = "${var.project}-ops-results"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "result_key"
+
+  attribute {
+    name = "result_key"
+    type = "S"
+  }
+
+  # A result is deleted a week after it was written
+  ttl {
+    attribute_name = "expires_at"
+    enabled        = true
+  }
+}
+
+module "ops_analytics_pod_identity" {
+  source               = "terraform-aws-modules/eks-pod-identity/aws"
+  version              = "~> 2.9"
+  name                 = "${var.project}-ops-analytics"
+  attach_custom_policy = true
+
+  policy_statements = [
+    {
+      sid       = "OperationsResults"
+      actions   = ["dynamodb:PutItem", "dynamodb:DescribeTable"]
+      resources = [aws_dynamodb_table.ops_results.arn]
+    },
+  ]
+
+  associations = {
+    ops_analytics = {
+      cluster_name    = module.eks.cluster_name
+      namespace       = "lineclear"
+      service_account = "ops-analytics"
+    }
+  }
+}

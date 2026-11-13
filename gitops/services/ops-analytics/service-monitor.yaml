@@ -1,0 +1,14 @@
+# Tells Prometheus to read the latest analytics results every 15 seconds
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ops-analytics
+  namespace: lineclear
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ops-analytics
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
