@@ -252,7 +252,7 @@ resource "aws_emr_cluster" "analytics" {
   bootstrap_action {
     name = "Send Flink logs to Loki"
     path = "s3://${aws_s3_bucket.analytics.id}/${aws_s3_object.ops_analytics_flink["ship-logs-to-loki.sh"].key}"
-    args = [aws_lb.loki[0].dns_name, "3100"]
+    args = [aws_lb.loki.dns_name, "3100"]
   }
 
   configurations_json = jsonencode([
