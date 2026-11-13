@@ -65,6 +65,38 @@ resource "aws_vpc_security_group_egress_rule" "emr_core_out" {
   description       = "S3, Kafka, Loki and package downloads"
 }
 
+# EMR reaches nodes in a private subnet through the service access group: in on 9443 from the
+# primary node, out on 8443 to both kinds of node. EMR checks these before it starts the cluster
+resource "aws_vpc_security_group_ingress_rule" "emr_service_access_from_primary" {
+  count                        = var.enable_emr ? 1 : 0
+  security_group_id            = aws_security_group.emr_service_access[0].id
+  referenced_security_group_id = aws_security_group.emr_primary[0].id
+  ip_protocol                  = "tcp"
+  from_port                    = 9443
+  to_port                      = 9443
+  description                  = "EMR service access from the primary node"
+}
+
+resource "aws_vpc_security_group_egress_rule" "emr_service_access_to_primary" {
+  count                        = var.enable_emr ? 1 : 0
+  security_group_id            = aws_security_group.emr_service_access[0].id
+  referenced_security_group_id = aws_security_group.emr_primary[0].id
+  ip_protocol                  = "tcp"
+  from_port                    = 8443
+  to_port                      = 8443
+  description                  = "EMR service access to the primary node"
+}
+
+resource "aws_vpc_security_group_egress_rule" "emr_service_access_to_core" {
+  count                        = var.enable_emr ? 1 : 0
+  security_group_id            = aws_security_group.emr_service_access[0].id
+  referenced_security_group_id = aws_security_group.emr_core[0].id
+  ip_protocol                  = "tcp"
+  from_port                    = 8443
+  to_port                      = 8443
+  description                  = "EMR service access to the core nodes"
+}
+
 # Flink runs on both kinds of node, so both may reach the Kafka brokers over TLS
 resource "aws_vpc_security_group_ingress_rule" "kafka_from_emr_primary" {
   count                        = var.enable_emr && var.enable_msk ? 1 : 0
@@ -246,5 +278,8 @@ resource "aws_emr_cluster" "analytics" {
     aws_route_table_association.emr,
     aws_vpc_security_group_egress_rule.emr_primary_out,
     aws_vpc_security_group_egress_rule.emr_core_out,
+    aws_vpc_security_group_ingress_rule.emr_service_access_from_primary,
+    aws_vpc_security_group_egress_rule.emr_service_access_to_primary,
+    aws_vpc_security_group_egress_rule.emr_service_access_to_core,
   ]
 }
