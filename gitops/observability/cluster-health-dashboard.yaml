@@ -40,7 +40,10 @@ data:
               "datasource": {"type": "prometheus", "uid": "prometheus"}
             }
           ],
-          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+          "fieldConfig": {
+            "defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}},
+            "overrides": []
+          },
           "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "textMode": "value"},
           "id": 2,
           "gridPos": {"h": 4, "w": 6, "x": 0, "y": 1}
@@ -48,11 +51,12 @@ data:
         {
           "type": "stat",
           "title": "Pods not ready in lineclear",
+          "description": "Pods that should be serving but are not ready. Finished Job pods are left out.",
           "datasource": {"type": "prometheus", "uid": "prometheus"},
           "targets": [
             {
               "refId": "A",
-              "expr": "sum(kube_pod_status_ready{namespace=\"lineclear\",condition=\"false\"}) or vector(0)",
+              "expr": "sum((kube_pod_status_ready{namespace=\"lineclear\",condition=\"false\"} == 1) and on (namespace, pod) (kube_pod_status_phase{namespace=\"lineclear\",phase=~\"Pending|Running|Unknown\"} == 1)) or vector(0)",
               "legendFormat": "",
               "datasource": {"type": "prometheus", "uid": "prometheus"}
             }
@@ -75,7 +79,7 @@ data:
           "targets": [
             {
               "refId": "A",
-              "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"lineclear\"}[1h])) or vector(0)",
+              "expr": "round(sum(increase(kube_pod_container_status_restarts_total{namespace=\"lineclear\"}[1h]))) or vector(0)",
               "legendFormat": "",
               "datasource": {"type": "prometheus", "uid": "prometheus"}
             }
@@ -103,7 +107,10 @@ data:
               "datasource": {"type": "prometheus", "uid": "prometheus"}
             }
           ],
-          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+          "fieldConfig": {
+            "defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}},
+            "overrides": []
+          },
           "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "textMode": "value"},
           "id": 5,
           "gridPos": {"h": 4, "w": 6, "x": 18, "y": 1}

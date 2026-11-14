@@ -49,7 +49,8 @@ data:
                   "type": "value",
                   "options": {"1": {"text": "Yes", "color": "green"}, "0": {"text": "No", "color": "red"}}
                 }
-              ]
+              ],
+              "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}
             },
             "overrides": []
           },
@@ -70,7 +71,10 @@ data:
               "datasource": {"type": "prometheus", "uid": "prometheus"}
             }
           ],
-          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+          "fieldConfig": {
+            "defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}},
+            "overrides": []
+          },
           "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "textMode": "value"},
           "id": 3,
           "gridPos": {"h": 4, "w": 6, "x": 6, "y": 1}
@@ -82,12 +86,15 @@ data:
           "targets": [
             {
               "refId": "A",
-              "expr": "sum(increase(lineclear_transactions_total{decision=\"commit\"}[24h])) or vector(0)",
+              "expr": "round(sum(increase(lineclear_transactions_total{decision=\"commit\"}[24h]))) or vector(0)",
               "legendFormat": "",
               "datasource": {"type": "prometheus", "uid": "prometheus"}
             }
           ],
-          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+          "fieldConfig": {
+            "defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}},
+            "overrides": []
+          },
           "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "textMode": "value"},
           "id": 4,
           "gridPos": {"h": 4, "w": 6, "x": 12, "y": 1}
@@ -99,12 +106,15 @@ data:
           "targets": [
             {
               "refId": "A",
-              "expr": "sum(increase(lineclear_transactions_total{decision=\"abort\"}[24h])) or vector(0)",
+              "expr": "round(sum(increase(lineclear_transactions_total{decision=\"abort\"}[24h]))) or vector(0)",
               "legendFormat": "",
               "datasource": {"type": "prometheus", "uid": "prometheus"}
             }
           ],
-          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+          "fieldConfig": {
+            "defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}},
+            "overrides": []
+          },
           "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "textMode": "value"},
           "id": 5,
           "gridPos": {"h": 4, "w": 6, "x": 18, "y": 1}
