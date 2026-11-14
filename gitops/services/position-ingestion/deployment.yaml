@@ -19,7 +19,7 @@ spec:
       serviceAccountName: position-ingestion
       containers:
         - name: position-ingestion
-          image: 714989832567.dkr.ecr.ap-south-1.amazonaws.com/lineclear/position-ingestion:999f9ad
+          image: 714989832567.dkr.ecr.ap-south-1.amazonaws.com/lineclear/position-ingestion:c0d103e
           ports:
             - name: http
               containerPort: 8000
