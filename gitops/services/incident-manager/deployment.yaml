@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
         - name: incident-manager
-          image: 714989832567.dkr.ecr.ap-south-1.amazonaws.com/lineclear/incident-manager:1110e09
+          image: 714989832567.dkr.ecr.ap-south-1.amazonaws.com/lineclear/incident-manager:05ca0fc
           ports:
             - name: http
               containerPort: 8000
