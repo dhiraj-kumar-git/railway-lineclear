@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
         - name: track-availability
-          image: 714989832567.dkr.ecr.ap-south-1.amazonaws.com/lineclear/track-availability:3421cc9
+          image: 714989832567.dkr.ecr.ap-south-1.amazonaws.com/lineclear/track-availability:e5a82c2
           ports:
             - name: grpc
               containerPort: 50051
