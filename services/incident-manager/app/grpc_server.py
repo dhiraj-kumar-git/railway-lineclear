@@ -19,6 +19,12 @@ GRPC_PORT = int(os.environ.get("GRPC_PORT", "50051"))
 VOTES = Counter("lineclear_participant_votes_total", "Prepare votes given", ["vote"])
 DECISIONS = Counter("lineclear_participant_decisions_total", "Transactions committed or aborted", ["decision"])
 STALE_TERMS = Counter("lineclear_participant_stale_term_rejections_total", "Calls refused for carrying an old term")
+# Create every label value at 0 on start-up. A labelled counter otherwise appears only on first use, already at 1,
+# and increase() never counts that first vote or decision.
+for _vote in ("YES", "NO"):
+    VOTES.labels(_vote)
+for _decision in ("committed", "aborted"):
+    DECISIONS.labels(_decision)
 
 TXN_STATES = {
     None: participant_pb2.TXN_STATE_UNSPECIFIED,
