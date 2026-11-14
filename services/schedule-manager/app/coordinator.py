@@ -42,6 +42,9 @@ RETRYABLE = {
 }
 
 TRANSACTIONS = Counter("lineclear_transactions_total", "Diversions decided, by decision", ["decision"])
+# Both decisions start at 0, so the first commit and the first abort each show as a step from 0 in increase()
+for _decision in ("commit", "abort"):
+    TRANSACTIONS.labels(_decision)
 PREPARE_SECONDS = Histogram(
     "lineclear_transaction_prepare_seconds",
     "Time from writing PREPARING to writing the decision",

@@ -22,7 +22,7 @@ spec:
       serviceAccountName: schedule-manager # its Pod Identity role may send to the notification queue
       containers:
         - name: schedule-manager
-          image: 714989832567.dkr.ecr.ap-south-1.amazonaws.com/lineclear/schedule-manager:4ed08f2
+          image: 714989832567.dkr.ecr.ap-south-1.amazonaws.com/lineclear/schedule-manager:3a1802f
           ports:
             - name: http
               containerPort: 8000
