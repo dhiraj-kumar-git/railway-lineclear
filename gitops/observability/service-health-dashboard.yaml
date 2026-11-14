@@ -40,7 +40,10 @@ data:
               "datasource": {"type": "prometheus", "uid": "prometheus"}
             }
           ],
-          "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+          "fieldConfig": {
+            "defaults": {"unit": "reqps", "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}},
+            "overrides": []
+          },
           "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "textMode": "value"},
           "id": 2,
           "gridPos": {"h": 4, "w": 6, "x": 0, "y": 1}
@@ -111,7 +114,10 @@ data:
               "datasource": {"type": "prometheus", "uid": "prometheus"}
             }
           ],
-          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+          "fieldConfig": {
+            "defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}},
+            "overrides": []
+          },
           "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background", "textMode": "value"},
           "id": 5,
           "gridPos": {"h": 4, "w": 6, "x": 18, "y": 1}
@@ -139,12 +145,12 @@ data:
         {
           "type": "timeseries",
           "title": "Server errors by service, share of requests",
-          "description": "5xx answers divided by all answers. The alert fires above 5%.",
+          "description": "5xx answers divided by all answers. The alert fires above 5%. Capped at 100% because a service with almost no traffic can give a misleading spike.",
           "datasource": {"type": "prometheus", "uid": "prometheus"},
           "targets": [
             {
               "refId": "A",
-              "expr": "(sum by (service) (rate(http_requests_total{namespace=\"lineclear\",status=\"5xx\"}[1m])) or sum by (service) (rate(http_requests_total{namespace=\"lineclear\"}[1m])) * 0) / sum by (service) (rate(http_requests_total{namespace=\"lineclear\"}[1m]))",
+              "expr": "clamp_max((sum by (service) (rate(http_requests_total{namespace=\"lineclear\",status=\"5xx\"}[1m])) or sum by (service) (rate(http_requests_total{namespace=\"lineclear\"}[1m])) * 0) / (sum by (service) (rate(http_requests_total{namespace=\"lineclear\"}[1m])) > 0), 1)",
               "legendFormat": "{{service}}",
               "datasource": {"type": "prometheus", "uid": "prometheus"}
             }
@@ -158,6 +164,8 @@ data:
                 "showPoints": "never",
                 "thresholdsStyle": {"mode": "dashed"}
               },
+              "min": 0,
+              "max": 1,
               "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 0.05}]}
             },
             "overrides": []
