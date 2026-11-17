@@ -1,6 +1,5 @@
 """Position Ingestion: accepts GPS position reports from trains."""
 
-import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -87,6 +86,4 @@ def latest_position(train_number: str) -> dict:
     position = app.state.store.latest(train_number)
     if position is None:
         raise HTTPException(status_code=404, detail=f"No position known for train {train_number}")
-    # How old the report is, so a controller can tell a fresh position from a stale one at a glance
-    position["age_seconds"] = round(max(0, time.time() * 1000 - position["recorded_at_ms"]) / 1000, 1)
     return position

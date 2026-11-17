@@ -12,7 +12,7 @@ from grpc_reflection.v1alpha import reflection
 from prometheus_client import Gauge, start_http_server
 
 from app.events import ElectionEvents
-from app.lease import ELECTIONS, LeaseStore
+from app.lease import LeaseStore
 from app.telemetry import MetricsInterceptor, configure_logging
 from lineclear import election_pb2, election_pb2_grpc
 
@@ -22,8 +22,6 @@ WATCHED_ELECTION = os.environ.get("WATCHED_ELECTION", "schedule-coordinator")
 
 HAS_LEADER = Gauge("lineclear_election_has_leader", "1 while someone holds a live lease, else 0", ["election"])
 TERM = Gauge("lineclear_election_term", "The current or last leader term", ["election"])
-# The watched election's counter starts at 0, so its first election shows as a step from 0 in increase()
-ELECTIONS.labels(WATCHED_ELECTION)
 
 logger = logging.getLogger("leader_election")
 

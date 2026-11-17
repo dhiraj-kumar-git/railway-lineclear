@@ -20,7 +20,7 @@ spec:
       serviceAccountName: leader-election
       containers:
         - name: leader-election
-          image: 714989832567.dkr.ecr.ap-south-1.amazonaws.com/lineclear/leader-election:6274af2
+          image: 714989832567.dkr.ecr.ap-south-1.amazonaws.com/lineclear/leader-election:9ad129a
           ports:
             - name: grpc
               containerPort: 50051
