@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LineClear Control Office</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="demo.css">
+</head>
+<body>
+  <header class="nameboard">
+    <div>
+      <h1>LineClear Control Office</h1>
+      <p>Railway LineClear application demo: diversions with two-phase commit</p>
+    </div>
+    <div class="shift">
+      <div class="shift-clock"><span id="clock">--:--:--</span> <small>IST</small></div>
+      <div id="duty-chip" class="duty-chip">Duty controller: waiting</div>
+      <div id="link-state" class="link-state" data-state="waiting">Connecting</div>
+      <div id="mode-badge" class="mode-badge"></div>
+    </div>
+  </header>
+
+  <nav class="views" aria-label="Who is using the system">
+    <a href="#report" id="tab-report" class="view-tab"><span class="step">1</span> Field staff <small>report a problem</small></a>
+    <a href="#control" id="tab-control" class="view-tab"><span class="step">2</span> Control office <small>station master</small></a>
+    <a href="#passenger" id="tab-passenger" class="view-tab"><span class="step">3</span> Passenger <small>where's my train?</small></a>
+    <a href="#scale" id="tab-scale" class="view-tab"><span class="step">4</span> Trains and scaling <small>GPS and autoscalers</small></a>
+  </nav>
+
+  <div class="layout">
+    <main>
+      <!-- ============================================================ 1 Field staff -->
+      <section id="view-report" class="view" aria-labelledby="report-heading" hidden>
+        <div class="persona">
+          <h2 id="report-heading">Field staff: report a problem on the line</h2>
+          <p>A track inspector or loco pilot reports what they see. This is a public call (<code>POST /api/incidents</code>), no staff key. If the report names a train, the duty controller diverts it through the loop line, and that diversion is a <strong>two-phase commit</strong>.</p>
+        </div>
+
+        <div class="cards two">
+          <section class="card">
+            <h3>Ready-made scenarios</h3>
+            <p class="hint">Each button sends real reports. Free the track (control office) between scenarios.</p>
+            <div class="scenario-list">
+              <button type="button" class="scenario" data-scenario="commit">
+                <strong>A. Everyone agrees: COMMIT</strong>
+                <span>Rail fracture on S7. Train 12951 needs loop line L2; both participants vote YES.</span>
+              </button>
+              <button type="button" class="scenario" data-scenario="abort">
+                <strong>B. One says no: ABORT</strong>
+                <span>12002 first takes L2 (signal failure on S9), then 12951 asks for L2. Track Availability votes NO, so nothing changes anywhere.</span>
+              </button>
+            </div>
+            <p class="hint">Scenario C, the duty controller freezing mid-commit, starts from the control office: arm the fault switch there, then run scenario A.</p>
+          </section>
+
+          <section class="card">
+            <h3>Report an incident</h3>
+            <form id="report-form" class="form">
+              <label>What happened
+                <select name="kind">
+                  <option value="rail_fracture">Rail fracture</option>
+                  <option value="signal_failure">Signal failure</option>
+                  <option value="track_obstruction">Track obstruction</option>
+                  <option value="overhead_wire_fault">Overhead wire fault</option>
+                </select>
+              </label>
+              <label>Block section
+                <select name="section" id="report-section"></select>
+              </label>
+              <label>Train affected
+                <select name="train_number" id="report-train"><option value="">No train (record only)</option></select>
+              </label>
+              <label class="wide">Note
+                <input name="description" maxlength="200" value="Reported from the field">
+              </label>
+              <button type="submit" class="primary wide">Report incident</button>
+            </form>
+          </section>
+        </div>
+
+        <section class="card" id="report-follow" hidden>
+          <div class="card-head">
+            <h3 id="report-follow-title">What happens next</h3>
+            <a href="#control" class="text-link">Open in the control office</a>
+          </div>
+          <div id="report-timeline"></div>
+        </section>
+      </section>
+
+      <!-- ============================================================ 2 Control office -->
+      <section id="view-control" class="view" aria-labelledby="control-heading" hidden>
+        <div class="persona">
+          <h2 id="control-heading">Control office: the station master's console</h2>
+          <p>Reads the four public APIs every few seconds. Staff actions (resolve, fault switch, free the track) go through this laptop's control-office server, which adds the staff key from Secrets Manager; the key never reaches the browser.</p>
+        </div>
+
+        <section class="card mimic">
+          <div class="card-head">
+            <h3>Division track diagram</h3>
+            <div class="legend"><span class="key key-blocked"></span>Closed by an incident <span class="key key-held"></span>Loop line reserved <span class="key key-train"></span>Train (last GPS report)</div>
+          </div>
+          <div id="track" class="track" aria-live="polite"></div>
+        </section>
+
+        <div class="cards two">
+          <section class="card">
+            <h3>Duty controller <span class="tag">f</span></h3>
+            <p class="hint">Two Schedule Manager replicas compete for one 6-second lease in Leader Election. The holder coordinates every diversion; its term is the shift number, and orders from an older term are refused.</p>
+            <div id="duty" class="duty"></div>
+            <ol id="term-log" class="term-log"></ol>
+          </section>
+
+          <section class="card staff">
+            <h3>Staff actions</h3>
+            <p class="hint" id="staff-state">Checking the staff key</p>
+            <div class="staff-row">
+              <button type="button" id="arm-freeze" class="warn">Freeze the duty controller after its next COMMIT</button>
+              <p class="hint">Arms the fault switch for 20 s (<code>POST /api/schedule/fault-switch</code>). Then run scenario A: the leader logs COMMIT and freezes, the other replica takes over with a higher term, reads the log and finishes the job. <span id="fault-state"></span></p>
+            </div>
+            <div class="staff-row">
+              <button type="button" id="free-track" class="secondary">Free the track</button>
+              <p class="hint">Releases every loop-line hold (gRPC <code>TrackStatus.ReleaseAllHolds</code>) and resolves open incidents, so the next scenario starts clean.</p>
+            </div>
+            <pre id="staff-output" class="output" hidden></pre>
+          </section>
+        </div>
+
+        <section class="card">
+          <div class="card-head">
+            <h3>Diversions: the coordinator's log <span class="tag">f</span> <span class="tag">g</span></h3>
+            <span class="hint">From <code>GET /api/schedule/diversions</code>, Schedule Manager's table in RDS. Select one to see its two phases.</span>
+          </div>
+          <div class="table-wrap">
+            <table class="register">
+              <thead><tr><th>Transaction</th><th>Train</th><th>Closed</th><th>Via</th><th>Term</th><th>Decision</th><th>Why</th></tr></thead>
+              <tbody id="diversions"><tr><td colspan="7" class="empty">No diversions yet</td></tr></tbody>
+            </table>
+          </div>
+          <div id="control-timeline" class="detail"></div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <h3>Incidents <span class="tag">g</span></h3>
+            <span class="hint">From <code>GET /api/incidents</code>, Incident Manager's table in RDS.</span>
+          </div>
+          <div class="table-wrap">
+            <table class="register">
+              <thead><tr><th>Incident</th><th>What</th><th>Section</th><th>Train</th><th>Status</th><th>Reported</th><th></th></tr></thead>
+              <tbody id="incidents"><tr><td colspan="7" class="empty">No incidents</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <!-- ============================================================ 3 Passenger -->
+      <section id="view-passenger" class="view" aria-labelledby="passenger-heading" hidden>
+        <div class="persona">
+          <h2 id="passenger-heading">Passenger: where's my train?</h2>
+          <p>Served by the Passenger Notification <strong>Lambda</strong> over its public HTTPS function URL. Schedule Manager put the committed diversion on an <strong>SQS</strong> queue; the Lambda wrote the notice to <strong>DynamoDB</strong> and the bulletin to <strong>S3</strong>. <span class="tag">b</span> <span class="tag">g</span></p>
+        </div>
+        <section class="card phone">
+          <label class="train-pick">Train
+            <select id="passenger-train"></select>
+          </label>
+          <div id="passenger-notice"></div>
+        </section>
+      </section>
+
+      <!-- ============================================================ 4 Trains and scaling -->
+      <section id="view-scale" class="view" aria-labelledby="scale-heading" hidden>
+        <div class="persona">
+          <h2 id="scale-heading">Trains and scaling</h2>
+          <p>Trains send GPS reports to Position Ingestion (<code>POST /api/positions</code>), which checks the train with Train Registry, keeps the latest position in DynamoDB and streams every report to Kafka for Flink. These two services carry the most traffic, so each has a Horizontal Pod Autoscaler: 60% CPU target, 2 to 8 pods. <span class="tag">c</span></p>
+        </div>
+
+        <section class="card">
+          <div class="card-head">
+            <h3>Autoscalers <span class="tag">c</span></h3>
+            <span class="hint" id="scaler-source">From <code>kubectl get hpa</code>, every 5 s.</span>
+          </div>
+          <div id="scalers" class="scalers"></div>
+          <p class="hint">Run the load test in the terminal (<code>k6 run -e BASE_URL=http://$ALB loadtest/autoscaling-smoke-test.js</code>) and watch the pods fill in. Grafana's Cluster health dashboard shows the same.</p>
+          <button type="button" id="rush" class="secondary" hidden>Simulate rush hour for 60 s (simulated mode only)</button>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <h3>Latest train positions</h3>
+            <button type="button" id="gps-round" class="secondary">Send one round of GPS reports</button>
+          </div>
+          <div class="table-wrap">
+            <table class="register">
+              <thead><tr><th>Train</th><th>Name</th><th>Section</th><th>Speed</th><th>Last report</th></tr></thead>
+              <tbody id="positions"><tr><td colspan="5" class="empty">Loading</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <!-- ============================================================ behind the scenes -->
+    <aside class="behind" aria-labelledby="behind-heading">
+      <h2 id="behind-heading">Behind the scenes</h2>
+
+      <section class="card">
+        <h3>Show it in the tools</h3>
+        <p class="hint" id="follow-note">Select or create a diversion to follow its transaction ID through every service.</p>
+        <div class="links" id="tool-links"></div>
+        <p class="hint">The terminal running this page prints every call it makes, with the service that answered.</p>
+      </section>
+
+      <section class="card">
+        <h3>Requirement tags</h3>
+        <ul class="tags-legend">
+          <li><span class="tag">b</span> Serverless and REST, gRPC, Kafka, SQS</li>
+          <li><span class="tag">c</span> Kubernetes autoscaling</li>
+          <li><span class="tag">f</span> Two-phase commit</li>
+          <li><span class="tag">g</span> RDS, DynamoDB, S3</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h3>Calls this page made</h3>
+        <ol id="activity" class="activity"></ol>
+      </section>
+    </aside>
+  </div>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+  <script src="demo.js"></script>
+</body>
+</html>
