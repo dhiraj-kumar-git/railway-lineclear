@@ -181,6 +181,24 @@ k6 run -e BASE_URL=http://$ALB loadtest/full-load-test.js
 
 `PEAK_VUS` changes the peak; `PROFILE=baseline` runs one user for a minute.
 
+## Team access
+
+Each member works on the deployed system from their own machine, under their own identity, and every part of that access is created as code.
+
+- **AWS:** `infra/platform/team_access.tf` creates an IAM user per member. A user can do nothing except assume its own role, and the session must be named after the user, so CloudTrail shows who did what. Each role allows only that member's tasks, and only `lineclear-control-office` can read the staff key.
+- **Kubernetes:** an EKS access entry maps each role to the group `lineclear-team` and to a group named after the role. `gitops/cluster-config/team-access.yaml` gives them read-only `view`, port-forward to Grafana, Prometheus and Argo CD, and, for observability, deleting a service pod. No member can change a Deployment: changes go through Git and Argo CD.
+- **Dashboards:** through that port-forward, Grafana opens read-only and Argo CD shows every Application read-only, without the admin passwords.
+- **Credentials:** access keys and console passwords are issued per member with the AWS CLI after `terraform apply`, so none is stored in the Terraform state. The teardown removes them with the users.
+
+| Role | Member | Allowed besides the common view |
+| --- | --- | --- |
+| `lineclear-control-office` | Dhiraj | Staff key, passenger function URL, analytics results |
+| `lineclear-analytics-gitops` | Riteshbabu | Flink job steps on EMR, analytics bucket and results, Kafka cluster details |
+| `lineclear-notifications-storage` | Saunak | Notification queues, passenger function and its logs, bulletins, notices, database details |
+| `lineclear-observability-scaling` | Abhinav | Election lease, CloudWatch metrics and logs, deleting a service pod |
+
+A member's machine needs the AWS CLI version 2 and kubectl. Their setup script writes the profile `lineclear-team`, which assumes their role, and a kubectl context of the same name.
+
 ## Tear down
 
 The public load balancer is created by Kubernetes, not Terraform, so the applications go first:

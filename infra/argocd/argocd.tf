@@ -10,6 +10,17 @@ resource "helm_release" "argocd" {
     dex = {
       enabled = false
     }
+    configs = {
+      # Team members reach the Argo CD page only through a port-forward their role allows
+      # (gitops/cluster-config/team-access.yaml). Without signing in they can see every
+      # Application and its sync state, but not sync, change or delete it: changes go through Git.
+      cm = {
+        "users.anonymous.enabled" = "true"
+      }
+      rbac = {
+        "policy.default" = "role:readonly"
+      }
+    }
   })]
 }
 

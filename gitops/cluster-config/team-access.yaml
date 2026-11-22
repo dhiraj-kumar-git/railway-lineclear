@@ -1,0 +1,107 @@
+# What each member's role may do inside the cluster. infra/platform/team_access.tf maps every
+# member's IAM role to the group lineclear-team, and to one group named after the role.
+# Nobody in these groups can create, change or delete a Deployment: those changes go through Git.
+
+# Read-only view of the whole cluster (no Secrets)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: lineclear-team-view
+subjects:
+  - kind: Group
+    name: lineclear-team
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: view
+  apiGroup: rbac.authorization.k8s.io
+---
+# The built-in view role does not cover Argo CD's own resources
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: lineclear-team-argocd-read
+rules:
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications", "appprojects"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: lineclear-team-argocd-read
+subjects:
+  - kind: Group
+    name: lineclear-team
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: lineclear-team-argocd-read
+  apiGroup: rbac.authorization.k8s.io
+---
+# Port-forward to reach the dashboards: Grafana and Prometheus in monitoring, Argo CD in argocd
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: lineclear-team-port-forward
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/portforward"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: lineclear-team-port-forward
+  namespace: monitoring
+subjects:
+  - kind: Group
+    name: lineclear-team
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: lineclear-team-port-forward
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: lineclear-team-port-forward
+  namespace: argocd
+subjects:
+  - kind: Group
+    name: lineclear-team
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: lineclear-team-port-forward
+  apiGroup: rbac.authorization.k8s.io
+---
+# Observability and scaling may delete a service pod during the load test, to show that the
+# Deployment replaces it. Deleting a pod changes nothing in Git, so Argo CD has nothing to undo.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: lineclear-delete-pods
+  namespace: lineclear
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: lineclear-observability-scaling-delete-pods
+  namespace: lineclear
+subjects:
+  - kind: Group
+    name: lineclear-observability-scaling
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: lineclear-delete-pods
+  apiGroup: rbac.authorization.k8s.io
