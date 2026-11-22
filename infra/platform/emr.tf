@@ -271,6 +271,12 @@ resource "aws_emr_cluster" "analytics" {
 
   tags = local.emr_managed_policy_tag
 
+  lifecycle {
+    # EMR picks the newest Amazon Linux release when the cluster starts, and the Flink job is started
+    # as a step afterwards. Neither is set here, so neither may make Terraform replace a running cluster.
+    ignore_changes = [os_release_label, step]
+  }
+
   depends_on = [
     aws_iam_role_policy_attachment.emr_service,
     aws_iam_role_policy.emr_service_pass_node_role,
