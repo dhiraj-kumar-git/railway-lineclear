@@ -18,6 +18,63 @@ locals {
   # dashboards. Each role is also in a group of its own name for anything beyond that.
   team_kubernetes_group = "${var.project}-team"
 
+  # Read-only calls the AWS console makes on the pages of one resource. Granted on that resource
+  # only, so a member's console pages load fully without reaching anything else.
+  lambda_function_read = [
+    "lambda:GetFunction",
+    "lambda:GetFunctionConfiguration",
+    "lambda:GetFunctionUrlConfig",
+    "lambda:GetPolicy",
+    "lambda:ListTags",
+    "lambda:GetFunctionConcurrency",
+    "lambda:GetFunctionCodeSigningConfig",
+    "lambda:GetRuntimeManagementConfig",
+    "lambda:GetFunctionEventInvokeConfig",
+    "lambda:GetFunctionRecursionConfig",
+    "lambda:ListAliases",
+    "lambda:ListVersionsByFunction",
+    "lambda:ListFunctionUrlConfigs",
+    "lambda:ListProvisionedConcurrencyConfigs",
+    "lambda:ListFunctionEventInvokeConfigs",
+  ]
+  dynamodb_table_read = [
+    "dynamodb:Describe*",
+    "dynamodb:ListTagsOfResource",
+    "dynamodb:Scan",
+    "dynamodb:Query",
+    "dynamodb:GetItem",
+  ]
+  s3_bucket_read = [
+    "s3:ListBucket",
+    "s3:ListBucketVersions",
+    "s3:GetBucket*",
+    "s3:GetEncryptionConfiguration",
+    "s3:GetLifecycleConfiguration",
+    "s3:GetReplicationConfiguration",
+    "s3:GetAccelerateConfiguration",
+    "s3:GetIntelligentTieringConfiguration",
+    "s3:GetInventoryConfiguration",
+    "s3:GetAnalyticsConfiguration",
+    "s3:GetMetricsConfiguration",
+  ]
+  s3_object_read = [
+    "s3:GetObject",
+    "s3:GetObjectAttributes",
+    "s3:GetObjectTagging",
+    "s3:GetObjectVersion",
+  ]
+  project_lambda_logs = "arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.project}-*"
+  log_events_read = [
+    "logs:FilterLogEvents",
+    "logs:GetLogEvents",
+    "logs:DescribeLogStreams",
+    "logs:DescribeMetricFilters",
+    "logs:DescribeSubscriptionFilters",
+    "logs:ListTagsForResource",
+    "logs:ListTagsLogGroup",
+    "logs:StartQuery",
+  ]
+
   # What each role may do besides the common part below. A role that is not listed for an action
   # is refused it, which the demo shows (for example, only the control office reads the staff key).
   team_role_statements = {
@@ -29,21 +86,28 @@ locals {
         Resource = aws_secretsmanager_secret.staff_api_key.arn
       },
       {
+        # Lists secret names for the console page; values stay refused except the staff key above
+        Sid      = "ListSecretNames"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:ListSecrets"]
+        Resource = "*"
+      },
+      {
         Sid      = "ReadPassengerFunction"
         Effect   = "Allow"
-        Action   = ["lambda:GetFunctionConfiguration", "lambda:GetFunctionUrlConfig"]
+        Action   = local.lambda_function_read
         Resource = aws_lambda_function.passenger_notification.arn
       },
       {
         Sid      = "ReadAnalyticsResults"
         Effect   = "Allow"
-        Action   = ["dynamodb:DescribeTable", "dynamodb:Scan"]
+        Action   = local.dynamodb_table_read
         Resource = aws_dynamodb_table.ops_results.arn
       },
       {
         Sid      = "SeeAnalyticsCluster"
         Effect   = "Allow"
-        Action   = ["elasticmapreduce:ListClusters"]
+        Action   = ["elasticmapreduce:Describe*", "elasticmapreduce:List*"]
         Resource = "*"
       },
     ]
@@ -53,11 +117,11 @@ locals {
         Sid    = "SeeAnalyticsCluster"
         Effect = "Allow"
         Action = [
-          "elasticmapreduce:ListClusters",
-          "elasticmapreduce:DescribeCluster",
-          "elasticmapreduce:ListSteps",
-          "elasticmapreduce:DescribeStep",
-          "elasticmapreduce:ListInstances",
+          "elasticmapreduce:Describe*",
+          "elasticmapreduce:List*",
+          "elasticmapreduce:GetManagedScalingPolicy",
+          "elasticmapreduce:GetAutoTerminationPolicy",
+          "elasticmapreduce:GetBlockPublicAccessConfiguration",
         ]
         Resource = "*"
       },
@@ -70,27 +134,32 @@ locals {
         Condition = { StringEquals = { "aws:ResourceTag/Project" = var.project } }
       },
       {
-        Sid      = "ListAnalyticsBucket"
+        Sid      = "ReadAnalyticsBucket"
         Effect   = "Allow"
-        Action   = ["s3:ListBucket"]
+        Action   = local.s3_bucket_read
         Resource = aws_s3_bucket.analytics.arn
       },
       {
-        Sid      = "ReadAnalyticsBucket"
+        Sid      = "ReadAnalyticsFiles"
         Effect   = "Allow"
-        Action   = ["s3:GetObject"]
+        Action   = local.s3_object_read
         Resource = "${aws_s3_bucket.analytics.arn}/*"
       },
       {
         Sid      = "ReadAnalyticsResults"
         Effect   = "Allow"
-        Action   = ["dynamodb:DescribeTable", "dynamodb:Scan", "dynamodb:Query", "dynamodb:GetItem"]
+        Action   = local.dynamodb_table_read
         Resource = aws_dynamodb_table.ops_results.arn
       },
       {
-        Sid      = "SeeKafka"
-        Effect   = "Allow"
-        Action   = ["kafka:ListClustersV2", "kafka:DescribeClusterV2", "kafka:GetBootstrapBrokers"]
+        Sid    = "SeeKafka"
+        Effect = "Allow"
+        Action = [
+          "kafka:Describe*",
+          "kafka:List*",
+          "kafka:GetBootstrapBrokers",
+          "kafka:GetCompatibleKafkaVersions",
+        ]
         Resource = "*"
       },
     ]
@@ -99,7 +168,13 @@ locals {
       {
         Sid    = "SeeNotificationQueues"
         Effect = "Allow"
-        Action = ["sqs:GetQueueAttributes", "sqs:GetQueueUrl"]
+        Action = [
+          "sqs:GetQueueAttributes",
+          "sqs:GetQueueUrl",
+          "sqs:ListQueueTags",
+          "sqs:ListDeadLetterSourceQueues",
+          "sqs:ListMessageMoveTasks",
+        ]
         Resource = [
           aws_sqs_queue.passenger_notifications.arn,
           aws_sqs_queue.passenger_notifications_dead_letter.arn,
@@ -112,55 +187,46 @@ locals {
         Resource = "*"
       },
       {
-        Sid    = "SeePassengerFunction"
-        Effect = "Allow"
-        Action = [
-          "lambda:GetFunction",
-          "lambda:GetFunctionConfiguration",
-          "lambda:GetFunctionUrlConfig",
-        ]
+        Sid      = "SeePassengerFunction"
+        Effect   = "Allow"
+        Action   = local.lambda_function_read
         Resource = aws_lambda_function.passenger_notification.arn
       },
       {
         Sid      = "SeeQueueTrigger"
         Effect   = "Allow"
-        Action   = ["lambda:ListEventSourceMappings"]
+        Action   = ["lambda:ListEventSourceMappings", "lambda:GetEventSourceMapping"]
         Resource = "*"
       },
       {
-        Sid      = "ReadPassengerFunctionLogs"
+        Sid      = "ReadProjectFunctionLogs"
         Effect   = "Allow"
-        Action   = ["logs:FilterLogEvents", "logs:GetLogEvents", "logs:DescribeLogStreams"]
-        Resource = "${aws_cloudwatch_log_group.passenger_notification.arn}:*"
+        Action   = local.log_events_read
+        Resource = [local.project_lambda_logs, "${local.project_lambda_logs}:*"]
       },
       {
-        Sid      = "ListLogGroups"
+        Sid      = "ReadBulletinsBucket"
         Effect   = "Allow"
-        Action   = ["logs:DescribeLogGroups"]
-        Resource = "*"
-      },
-      {
-        Sid      = "ListBulletinsBucket"
-        Effect   = "Allow"
-        Action   = ["s3:ListBucket"]
+        Action   = local.s3_bucket_read
         Resource = aws_s3_bucket.bulletins.arn
       },
       {
         Sid      = "ReadBulletins"
         Effect   = "Allow"
-        Action   = ["s3:GetObject"]
+        Action   = local.s3_object_read
         Resource = "${aws_s3_bucket.bulletins.arn}/*"
       },
       {
         Sid      = "ReadPassengerNotices"
         Effect   = "Allow"
-        Action   = ["dynamodb:DescribeTable", "dynamodb:Scan", "dynamodb:Query", "dynamodb:GetItem"]
+        Action   = local.dynamodb_table_read
         Resource = aws_dynamodb_table.passenger_notices.arn
       },
       {
+        # Database details only: the connection passwords are in Secrets Manager, which stays refused
         Sid      = "SeeDatabase"
         Effect   = "Allow"
-        Action   = ["rds:DescribeDBInstances"]
+        Action   = ["rds:Describe*", "rds:ListTagsForResource"]
         Resource = "*"
       },
     ]
@@ -169,31 +235,20 @@ locals {
       {
         Sid      = "ReadElectionLease"
         Effect   = "Allow"
-        Action   = ["dynamodb:DescribeTable", "dynamodb:Scan", "dynamodb:GetItem"]
+        Action   = local.dynamodb_table_read
         Resource = aws_dynamodb_table.election_lease.arn
       },
       {
-        Sid    = "ReadMetrics"
-        Effect = "Allow"
-        Action = [
-          "cloudwatch:GetMetricData",
-          "cloudwatch:GetMetricStatistics",
-          "cloudwatch:ListMetrics",
-          "cloudwatch:DescribeAlarms",
-        ]
+        Sid      = "ReadMetricsAndAlarms"
+        Effect   = "Allow"
+        Action   = ["cloudwatch:Describe*", "cloudwatch:Get*", "cloudwatch:List*"]
         Resource = "*"
       },
       {
-        Sid      = "ListLogGroups"
+        Sid      = "ReadProjectFunctionLogs"
         Effect   = "Allow"
-        Action   = ["logs:DescribeLogGroups"]
-        Resource = "*"
-      },
-      {
-        Sid      = "ReadProjectLogs"
-        Effect   = "Allow"
-        Action   = ["logs:FilterLogEvents", "logs:GetLogEvents", "logs:DescribeLogStreams"]
-        Resource = "arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.project}-*:*"
+        Action   = local.log_events_read
+        Resource = [local.project_lambda_logs, "${local.project_lambda_logs}:*"]
       },
     ]
   }
@@ -276,6 +331,57 @@ resource "aws_iam_role_policy" "team_common" {
         Sid      = "ListClusters"
         Effect   = "Allow"
         Action   = ["eks:ListClusters"]
+        Resource = "*"
+      },
+    ]
+  })
+}
+
+# Common to every role: the list pages and lookups the AWS console makes on its way to a
+# member's own resources. Names and settings only; contents stay limited to each role's resources.
+resource "aws_iam_role_policy" "team_console" {
+  for_each = local.team
+
+  name = "console-read"
+  role = aws_iam_role.team[each.key].id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "ClusterPages"
+        Effect   = "Allow"
+        Action   = ["eks:Describe*", "eks:List*", "eks:AccessKubernetesApi"]
+        Resource = "*"
+      },
+      {
+        Sid    = "ListResourceNames"
+        Effect = "Allow"
+        Action = [
+          "s3:ListAllMyBuckets",
+          "s3:GetBucketLocation",
+          "dynamodb:ListTables",
+          "dynamodb:DescribeLimits",
+          "lambda:ListFunctions",
+          "logs:DescribeLogGroups",
+          "logs:GetQueryResults",
+          "logs:DescribeQueries",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "MetricsAndNetworkDetails"
+        Effect = "Allow"
+        Action = [
+          "cloudwatch:GetMetricData",
+          "cloudwatch:GetMetricStatistics",
+          "cloudwatch:ListMetrics",
+          "cloudwatch:DescribeAlarms",
+          "cloudwatch:DescribeAlarmsForMetric",
+          "ec2:DescribeVpcs",
+          "ec2:DescribeSubnets",
+          "ec2:DescribeSecurityGroups",
+          "ec2:DescribeAvailabilityZones",
+        ]
         Resource = "*"
       },
     ]
