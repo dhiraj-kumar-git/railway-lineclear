@@ -1,5 +1,7 @@
 # Railway LineClear
 
+Adding a temporary change for ArgoCD.
+
 Railway LineClear manages train movements for a railway division, modelled on Indian Railways. Trains report their GPS positions, staff report track incidents, and trains are diverted around blocked sections using two-phase commit, coordinated by an elected duty controller.
 
 "Line clear" is the permission a station gives before a train may enter the next block section. In this system it is the prepare phase of two-phase commit: every station involved must agree before a diversion goes ahead.
